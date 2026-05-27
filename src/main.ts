@@ -24,6 +24,7 @@ const shortcutUrlInput = document.getElementById('shortcutUrl') as HTMLInputElem
 const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLButtonElement>
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
+const weatherEl = document.getElementById('weather') as HTMLDivElement
 
 let currentEngine: Engine = 'bing'
 let debounceTimer: number | null = null
@@ -89,7 +90,8 @@ async function loadBackground(): Promise<void> {
     img.src = blobUrl
 
     // 6. 更新缓存元数据
-    localStorage.setItem(cacheKey, JSON.stringify({ url: todayUrl }))
+    wallpaperInfo.textContent = todayTitle
+    localStorage.setItem(cacheKey, JSON.stringify({ url: todayUrl, title: todayTitle }))
 
     // 7. 清理旧缓存
     const keys = await cache.keys()
@@ -415,5 +417,27 @@ function updateClock(): void {
 updateClock()
 setInterval(updateClock, 1000)
 
+async function loadWeather(): Promise<void> {
+  try {
+    const res = await fetch('https://wttr.in/?format=j1&lang=zh')
+    const data = await res.json()
+    const current = data.current_condition[0]
+    const area = data.nearest_area[0]
+    const temp = current.temp_C
+    const desc = current.lang_zh[0]?.value || current.weatherDesc[0]?.value || ''
+    const city = area.areaName[0]?.value || ''
+    weatherEl.innerHTML = `
+      <div>
+        <div class="weather-temp">${temp}°C</div>
+        <div class="weather-desc">${desc}</div>
+        <div class="weather-loc">${city}</div>
+      </div>
+    `
+  } catch {
+    weatherEl.innerHTML = ''
+  }
+}
+
+loadWeather()
 loadBackground()
 loadShortcuts()
