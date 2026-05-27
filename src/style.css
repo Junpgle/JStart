@@ -431,47 +431,27 @@ body {
   margin-bottom: 4px;
 }
 
-.pomodoro-status {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: rgba(255, 71, 87, 0.9);
-  color: #fff;
+.clock.pomodoro {
+  text-align: center;
+}
+
+.pomodoro-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+  opacity: 0.85;
+}
+
+.clock-sub {
+  display: block;
+  text-align: center;
   font-size: 14px;
-  font-weight: 600;
-  box-shadow: 0 2px 12px rgba(255, 71, 87, 0.4);
-  z-index: 10;
-  user-select: none;
-  pointer-events: none;
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.pomodoro-status.active {
-  display: flex;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 2px 12px rgba(255, 71, 87, 0.4); }
-  50% { box-shadow: 0 2px 20px rgba(255, 71, 87, 0.7); }
-}
-
-.pomodoro-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #fff;
-  animation: blink 1.5s ease-in-out infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: 4px;
+  letter-spacing: normal;
+  animation: none;
+  text-shadow: none;
 }
 
 .toast {

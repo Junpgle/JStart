@@ -24,7 +24,6 @@ const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLBu
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 const weatherEl = document.getElementById('weather') as HTMLDivElement
-const pomodoroStatus = document.getElementById('pomodoroStatus') as HTMLDivElement
 const toastEl = document.getElementById('toast') as HTMLDivElement
 const userBtn = document.getElementById('userBtn') as HTMLButtonElement
 const loginModal = document.getElementById('loginModal') as HTMLDivElement
@@ -468,7 +467,14 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 
 themeBtn.addEventListener('click', cycleTheme)
 
+let pomodoroTimestamp = 0
+let pomodoroTargetEnd = 0
+let pomodoroMode = 0 // 0=倒计时, 1=正计时
+let pomodoroTodoTitle = ''
+let pomodoroTickTimer: number | null = null
+
 function updateClock(): void {
+  if (pomodoroTimestamp) return
   const now = new Date()
   clock.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
@@ -497,12 +503,6 @@ async function loadWeather(): Promise<void> {
   }
 }
 
-let pomodoroTimestamp = 0
-let pomodoroTargetEnd = 0
-let pomodoroTodoTitle = ''
-let pomodoroMode = 0 // 0=倒计时, 1=正计时
-let pomodoroTickTimer: number | null = null
-
 function updatePomodoroDisplay(): void {
   if (!pomodoroTimestamp) return
   const now = Date.now()
@@ -516,14 +516,22 @@ function updatePomodoroDisplay(): void {
   }
   const min = Math.floor(display / 60)
   const sec = display % 60
-  const title = pomodoroTodoTitle ? ` · ${pomodoroTodoTitle}` : ''
-  const icon = pomodoroMode === 1 ? '🍅' : '⏱️'
-  pomodoroStatus.innerHTML = `<span class="pomodoro-dot"></span>${icon} ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${title}`
+  const title = pomodoroTodoTitle ? `<div class="clock-sub">${pomodoroTodoTitle}</div>` : ''
+  const icon = `<span class="pomodoro-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/></svg></span>`
+  clock.innerHTML = `${icon}${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${title}`
+  clock.className = 'clock pomodoro'
+}
+
+function stopPomodoroDisplay(): void {
+  clock.classList.remove('pomodoro')
+  if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
+  pomodoroTimestamp = 0
+  updateClock()
 }
 
 async function checkPomodoro(): Promise<void> {
   if (!isLoggedIn()) {
-    pomodoroStatus.classList.remove('active')
+    stopPomodoroDisplay()
     return
   }
   try {
@@ -538,15 +546,12 @@ async function checkPomodoro(): Promise<void> {
       pomodoroTimestamp = s.timestamp || 0
       pomodoroTargetEnd = s.target_end_ms || 0
       pomodoroTodoTitle = s.todo_title || s.todoTitle || ''
-      pomodoroStatus.classList.add('active')
       updatePomodoroDisplay()
       if (!pomodoroTickTimer) {
         pomodoroTickTimer = window.setInterval(updatePomodoroDisplay, 1000)
       }
     } else {
-      pomodoroStatus.classList.remove('active')
-      if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
-      pomodoroTimestamp = 0
+      stopPomodoroDisplay()
     }
   } catch {}
 }
