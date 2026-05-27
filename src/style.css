@@ -430,6 +430,33 @@ body {
   margin-bottom: 4px;
 }
 
+.toast {
+  position: fixed;
+  top: 72px;
+  right: 20px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateX(120%);
+  transition: transform 0.3s ease;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.toast.visible {
+  transform: translateX(0);
+}
+
+.toast.success {
+  background: #2ed573;
+}
+
+.toast.error {
+  background: #ff4757;
+}
+
 .modal {
   position: fixed;
   top: 0;

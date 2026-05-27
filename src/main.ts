@@ -24,6 +24,7 @@ const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLBu
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 const weatherEl = document.getElementById('weather') as HTMLDivElement
+const toastEl = document.getElementById('toast') as HTMLDivElement
 const userBtn = document.getElementById('userBtn') as HTMLButtonElement
 const loginModal = document.getElementById('loginModal') as HTMLDivElement
 const loginTitle = document.getElementById('loginTitle') as HTMLHeadingElement
@@ -463,6 +464,19 @@ loadWeather()
 loadBackground()
 loadShortcuts()
 
+// ==================== Toast ====================
+
+let toastTimer: number | null = null
+
+function showToast(message: string, type: 'success' | 'error' = 'success'): void {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastEl.textContent = message
+  toastEl.className = `toast ${type} visible`
+  toastTimer = window.setTimeout(() => {
+    toastEl.classList.remove('visible')
+  }, 2500)
+}
+
 // ==================== Auth ====================
 
 function getToken(): string | null {
@@ -494,6 +508,7 @@ userBtn.addEventListener('click', () => {
     localStorage.removeItem('jstart_token')
     localStorage.removeItem('jstart_user')
     updateUserBtn()
+    showToast('已退出登录')
   } else {
     loginModal.classList.add('visible')
     loginError.textContent = ''
@@ -605,6 +620,7 @@ loginSubmitBtn.addEventListener('click', async () => {
         localStorage.setItem('jstart_user', JSON.stringify(loginData.user))
       }
       closeLoginModal()
+      showToast('登录成功')
       updateUserBtn()
       await pullShortcuts()
       return
@@ -632,6 +648,7 @@ loginSubmitBtn.addEventListener('click', async () => {
     localStorage.setItem('jstart_token', data.token)
     localStorage.setItem('jstart_user', JSON.stringify(data.user))
     closeLoginModal()
+    showToast('登录成功')
     updateUserBtn()
     await pullShortcuts()
   } catch {
@@ -667,23 +684,26 @@ async function pullShortcuts(): Promise<void> {
     const res = await fetch(`${API_BASE}/api/jstart/shortcuts`, {
       headers: { 'Authorization': `Bearer ${getToken()}` }
     })
-    if (!res.ok) return
+    if (!res.ok) { showToast('同步失败', 'error'); return }
     const data = await res.json()
     if (data.shortcuts && data.shortcuts.length > 0) {
       localStorage.setItem('shortcuts', JSON.stringify(data.shortcuts))
       renderShortcuts(data.shortcuts)
+      showToast('同步成功')
     } else {
       // 云端无数据，把本地推上去
       const local = localStorage.getItem('shortcuts')
       if (local) await pushShortcuts(JSON.parse(local))
     }
-  } catch {}
+  } catch {
+    showToast('同步失败', 'error')
+  }
 }
 
 async function pushShortcuts(shortcuts: Shortcut[]): Promise<void> {
   if (!isLoggedIn()) return
   try {
-    await fetch(`${API_BASE}/api/jstart/shortcuts`, {
+    const res = await fetch(`${API_BASE}/api/jstart/shortcuts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -691,7 +711,14 @@ async function pushShortcuts(shortcuts: Shortcut[]): Promise<void> {
       },
       body: JSON.stringify({ shortcuts })
     })
-  } catch {}
+    if (res.ok) {
+      showToast('已同步')
+    } else {
+      showToast('同步失败', 'error')
+    }
+  } catch {
+    showToast('同步失败', 'error')
+  }
 }
 
 function syncAfterChange(): void {
