@@ -41,7 +41,9 @@
           <button class="engine-btn" data-engine="baidu">百度</button>
         </div>
         <div class="input-wrapper">
-          <input type="text" id="searchInput" placeholder="搜索..." autocomplete="off">
+          <input type="email" style="position:absolute;opacity:0;height:0;width:0;pointer-events:none" tabindex="-1" aria-hidden="true">
+          <input type="password" style="position:absolute;opacity:0;height:0;width:0;pointer-events:none" tabindex="-1" aria-hidden="true">
+          <input type="text" id="searchInput" placeholder="搜索..." autocomplete="new-password">
           <button id="searchBtn" class="search-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
@@ -72,9 +74,9 @@
   <div class="modal" id="loginModal">
     <div class="modal-content">
       <h3 id="loginTitle">登录</h3>
-      <input type="text" id="loginUsername" placeholder="用户名" style="display:none">
-      <input type="email" id="loginEmail" placeholder="邮箱">
-      <input type="password" id="loginPassword" placeholder="密码">
+      <input type="text" id="loginUsername" placeholder="用户名" style="display:none" autocomplete="username">
+      <input type="email" id="loginEmail" placeholder="邮箱" autocomplete="email">
+      <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
       <input type="text" id="loginCode" placeholder="邮箱验证码" style="display:none" maxlength="6">
       <div id="loginError" class="login-error"></div>
       <div class="modal-actions">

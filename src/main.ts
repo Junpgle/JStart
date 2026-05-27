@@ -50,24 +50,34 @@ const searchUrls: Record<Engine, string> = {
 }
 
 async function loadBackground(): Promise<void> {
-  const cacheName = 'jstart-wallpaper'
   const cacheKey = 'wallpaper-cache'
+  const imgDataKey = 'wallpaper-img-data'
 
   // 1. 立即显示缓存壁纸
   const cached = localStorage.getItem(cacheKey)
+  let cacheAvailable = false
   if (cached) {
     const { url, title } = JSON.parse(cached)
     if (title) wallpaperInfo.textContent = title
+    // 优先从 Cache API 读取
     try {
-      const cache = await caches.open(cacheName)
+      const cache = await caches.open('jstart-wallpaper')
       const response = await cache.match(url)
       if (response) {
         const blob = await response.blob()
-        const blobUrl = URL.createObjectURL(blob)
-        background.style.backgroundImage = `url(${blobUrl})`
+        background.style.backgroundImage = `url(${URL.createObjectURL(blob)})`
         background.classList.add('loaded')
+        cacheAvailable = true
       }
     } catch {}
+    // Cache API 失败，从 localStorage 读 base64
+    if (!cacheAvailable) {
+      const imgData = localStorage.getItem(imgDataKey)
+      if (imgData) {
+        background.style.backgroundImage = `url(${imgData})`
+        background.classList.add('loaded')
+      }
+    }
   }
 
   // 2. 获取今天的壁纸元数据
@@ -83,39 +93,47 @@ async function loadBackground(): Promise<void> {
     // 3. 如果今天壁纸和缓存相同，已完成
     if (cachedData && cachedData.url === todayUrl) return
 
-    // 4. 下载新壁纸
-    const cache = await caches.open(cacheName)
-    const imgRes = await fetch(todayUrl)
-    await cache.put(todayUrl, imgRes.clone())
+    // 4. 下载新壁纸并淡入
+    const applyImage = (src: string) => {
+      const img = new Image()
+      img.onload = () => {
+        background.style.backgroundImage = `url(${src})`
+        if (!background.classList.contains('loaded')) {
+          background.classList.add('loaded')
+        }
+      }
+      img.src = src
+    }
 
-    // 5. 新壁纸下载完毕后淡入
+    const imgRes = await fetch(todayUrl)
     const blob = await imgRes.blob()
     const blobUrl = URL.createObjectURL(blob)
 
-    // 确保图片预加载完成后再淡入
-    const img = new Image()
-    img.onload = () => {
-      background.style.backgroundImage = `url(${blobUrl})`
-      // 如果之前没loaded（无缓存），触发淡入
-      if (!background.classList.contains('loaded')) {
-        background.classList.add('loaded')
+    // 5. 缓存到 Cache API
+    try {
+      const cache = await caches.open('jstart-wallpaper')
+      await cache.put(todayUrl, new Response(blob))
+      // 清理旧缓存
+      const keys = await cache.keys()
+      for (const req of keys) {
+        if (req.url !== todayUrl) await cache.delete(req)
       }
+    } catch {
+      // Cache API 不可用，存 base64 到 localStorage
+      const reader = new FileReader()
+      reader.onload = () => {
+        try { localStorage.setItem(imgDataKey, reader.result as string) } catch {}
+      }
+      reader.readAsDataURL(blob)
     }
-    img.src = blobUrl
 
-    // 6. 更新缓存元数据
+    // 6. 淡入新壁纸
+    applyImage(blobUrl)
+
+    // 7. 更新缓存元数据
     wallpaperInfo.textContent = todayTitle
     localStorage.setItem(cacheKey, JSON.stringify({ url: todayUrl, title: todayTitle }))
-
-    // 7. 清理旧缓存
-    const keys = await cache.keys()
-    for (const req of keys) {
-      if (req.url !== todayUrl) {
-        await cache.delete(req)
-      }
-    }
   } catch {
-    // 网络失败，如果还没显示缓存，用纯色兜底
     if (!background.classList.contains('loaded')) {
       background.style.backgroundColor = '#1a1a2e'
       background.classList.add('loaded')
@@ -263,13 +281,31 @@ function loadShortcuts(): void {
   renderShortcuts(shortcuts)
 }
 
+const faviconCache = new Map<string, string>()
+
 function getFaviconUrl(url: string): string {
   try {
     const domain = new URL(url).hostname
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    const cached = faviconCache.get(domain)
+    if (cached) return cached
+    const remote = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    // 后台获取并缓存为 blob URL
+    fetch(remote).then(r => r.blob()).then(blob => {
+      const blobUrl = URL.createObjectURL(blob)
+      faviconCache.set(domain, blobUrl)
+      // 更新已渲染的 img
+      document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
+        img.src = blobUrl
+      })
+    }).catch(() => {})
+    return remote
   } catch {
     return ''
   }
+}
+
+function getDomain(url: string): string {
+  try { return new URL(url).hostname } catch { return '' }
 }
 
 function renderShortcuts(shortcuts: Shortcut[]): void {
@@ -277,7 +313,7 @@ function renderShortcuts(shortcuts: Shortcut[]): void {
     <div class="shortcut-item" data-index="${i}" draggable="true">
       <a href="${s.url}" class="shortcut-link" target="_blank">
         <div class="shortcut-icon">
-          <img src="${getFaviconUrl(s.url)}" alt="${s.name}" loading="lazy">
+          <img src="${getFaviconUrl(s.url)}" class="favicon-${getDomain(s.url)}" alt="${s.name}" loading="lazy">
         </div>
         <div class="shortcut-name">${s.name}</div>
       </a>
