@@ -13,6 +13,7 @@ const searchInput = document.getElementById('searchInput') as HTMLInputElement
 const searchBtn = document.getElementById('searchBtn') as HTMLButtonElement
 const suggestions = document.getElementById('suggestions') as HTMLDivElement
 const searchBox = document.querySelector('.search-box') as HTMLDivElement
+const themeBtn = document.getElementById('themeBtn') as HTMLButtonElement
 const shortcutsGrid = document.getElementById('shortcutsGrid') as HTMLDivElement
 const addShortcutBtn = document.getElementById('addShortcutBtn') as HTMLButtonElement
 const addModal = document.getElementById('addModal') as HTMLDivElement
@@ -32,14 +33,73 @@ const searchUrls: Record<Engine, string> = {
 }
 
 async function loadBackground(): Promise<void> {
+  const cacheName = 'jstart-wallpaper'
+  const cacheKey = 'wallpaper-cache'
+
+  // 1. 立即显示缓存壁纸
+  const cached = localStorage.getItem(cacheKey)
+  if (cached) {
+    const { url } = JSON.parse(cached)
+    try {
+      const cache = await caches.open(cacheName)
+      const response = await cache.match(url)
+      if (response) {
+        const blob = await response.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        background.style.backgroundImage = `url(${blobUrl})`
+        background.classList.add('loaded')
+      }
+    } catch {}
+  }
+
+  // 2. 获取今天的壁纸元数据
   try {
     const res = await fetch('https://bing.biturl.top/?resolution=UHD&format=json&index=0&mkt=zh-CN')
     const data = await res.json()
-    if (data.url) {
-      background.style.backgroundImage = `url(${data.url})`
+    if (!data.url) return
+
+    const todayUrl = data.url
+    const cachedData = cached ? JSON.parse(cached) : null
+
+    // 3. 如果今天壁纸和缓存相同，已完成
+    if (cachedData && cachedData.url === todayUrl) return
+
+    // 4. 下载新壁纸
+    const cache = await caches.open(cacheName)
+    const imgRes = await fetch(todayUrl)
+    await cache.put(todayUrl, imgRes.clone())
+
+    // 5. 新壁纸下载完毕后淡入
+    const blob = await imgRes.blob()
+    const blobUrl = URL.createObjectURL(blob)
+
+    // 确保图片预加载完成后再淡入
+    const img = new Image()
+    img.onload = () => {
+      background.style.backgroundImage = `url(${blobUrl})`
+      // 如果之前没loaded（无缓存），触发淡入
+      if (!background.classList.contains('loaded')) {
+        background.classList.add('loaded')
+      }
+    }
+    img.src = blobUrl
+
+    // 6. 更新缓存元数据
+    localStorage.setItem(cacheKey, JSON.stringify({ url: todayUrl }))
+
+    // 7. 清理旧缓存
+    const keys = await cache.keys()
+    for (const req of keys) {
+      if (req.url !== todayUrl) {
+        await cache.delete(req)
+      }
     }
   } catch {
-    background.style.backgroundImage = 'url(https://picsum.photos/1920/1080)'
+    // 网络失败，如果还没显示缓存，用纯色兜底
+    if (!background.classList.contains('loaded')) {
+      background.style.backgroundColor = '#1a1a2e'
+      background.classList.add('loaded')
+    }
   }
 }
 
@@ -176,20 +236,120 @@ function loadShortcuts(): void {
     { name: 'Twitter', url: 'https://twitter.com', icon: 'T' },
     { name: '知乎', url: 'https://zhihu.com', icon: '知' }
   ]
+  if (!saved) {
+    localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
+  }
   renderShortcuts(shortcuts)
 }
 
+function getFaviconUrl(url: string): string {
+  try {
+    const domain = new URL(url).hostname
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+  } catch {
+    return ''
+  }
+}
+
 function renderShortcuts(shortcuts: Shortcut[]): void {
-  shortcutsGrid.innerHTML = shortcuts.map(s => `
-    <a href="${s.url}" class="shortcut-item" target="_blank">
-      <div class="shortcut-icon">${s.icon}</div>
-      <div class="shortcut-name">${s.name}</div>
-    </a>
+  shortcutsGrid.innerHTML = shortcuts.map((s, i) => `
+    <div class="shortcut-item" data-index="${i}" draggable="true">
+      <a href="${s.url}" class="shortcut-link" target="_blank">
+        <div class="shortcut-icon">
+          <img src="${getFaviconUrl(s.url)}" alt="${s.name}" loading="lazy">
+        </div>
+        <div class="shortcut-name">${s.name}</div>
+      </a>
+      <button class="shortcut-delete" data-index="${i}">×</button>
+    </div>
   `).join('')
 }
 
 addShortcutBtn.addEventListener('click', () => {
   addModal.classList.add('visible')
+})
+
+let dragIndex: number | null = null
+let dragStartPos = { x: 0, y: 0 }
+let dragAllowed = false
+
+shortcutsGrid.addEventListener('mousedown', (e) => {
+  const target = e.target as HTMLElement
+  if (target.classList.contains('shortcut-delete')) return
+  dragStartPos = { x: e.clientX, y: e.clientY }
+  dragAllowed = false
+})
+
+shortcutsGrid.addEventListener('mousemove', (e) => {
+  if (e.buttons !== 1) return
+  const dx = e.clientX - dragStartPos.x
+  const dy = e.clientY - dragStartPos.y
+  if (Math.abs(dx) + Math.abs(dy) > 5) {
+    dragAllowed = true
+  }
+})
+
+shortcutsGrid.addEventListener('dragstart', (e) => {
+  if (!dragAllowed) {
+    e.preventDefault()
+    return
+  }
+  const item = (e.target as HTMLElement).closest('.shortcut-item') as HTMLElement | null
+  if (!item) return
+  dragIndex = parseInt(item.dataset.index || '0')
+  item.classList.add('dragging')
+  e.dataTransfer!.effectAllowed = 'move'
+})
+
+shortcutsGrid.addEventListener('dragover', (e) => {
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'move'
+  const item = (e.target as HTMLElement).closest('.shortcut-item') as HTMLElement | null
+  shortcutsGrid.querySelectorAll('.shortcut-item').forEach(el => el.classList.remove('drag-over'))
+  if (item && parseInt(item.dataset.index || '0') !== dragIndex) {
+    item.classList.add('drag-over')
+  }
+})
+
+shortcutsGrid.addEventListener('dragleave', (e) => {
+  const item = (e.target as HTMLElement).closest('.shortcut-item') as HTMLElement | null
+  if (item) item.classList.remove('drag-over')
+})
+
+shortcutsGrid.addEventListener('drop', (e) => {
+  e.preventDefault()
+  const item = (e.target as HTMLElement).closest('.shortcut-item') as HTMLElement | null
+  if (!item || dragIndex === null) return
+  const dropIndex = parseInt(item.dataset.index || '0')
+  if (dragIndex === dropIndex) return
+  const saved = localStorage.getItem('shortcuts')
+  const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
+  const [moved] = shortcuts.splice(dragIndex, 1)
+  shortcuts.splice(dropIndex, 0, moved)
+  localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
+  renderShortcuts(shortcuts)
+  dragIndex = null
+})
+
+shortcutsGrid.addEventListener('dragend', () => {
+  dragIndex = null
+  shortcutsGrid.querySelectorAll('.shortcut-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over')
+  })
+})
+
+shortcutsGrid.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement
+  if (target.classList.contains('shortcut-delete')) {
+    e.preventDefault()
+    e.stopPropagation()
+    const index = parseInt(target.dataset.index || '0')
+    const saved = localStorage.getItem('shortcuts')
+    const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
+    shortcuts.splice(index, 1)
+    localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
+    renderShortcuts(shortcuts)
+  }
 })
 
 cancelBtn.addEventListener('click', () => {
@@ -210,6 +370,38 @@ saveBtn.addEventListener('click', () => {
     addModal.classList.remove('visible')
   }
 })
+
+type Theme = 'auto' | 'light' | 'dark'
+
+function getSystemTheme(): 'light' | 'dark' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function applyTheme(theme: Theme): void {
+  const effective = theme === 'auto' ? getSystemTheme() : theme
+  document.documentElement.setAttribute('data-theme', effective)
+  themeBtn.className = 'theme-btn theme-' + theme
+  localStorage.setItem('theme', theme)
+}
+
+function cycleTheme(): void {
+  const current = (localStorage.getItem('theme') || 'auto') as Theme
+  const next: Theme = current === 'auto' ? 'light' : current === 'light' ? 'dark' : 'auto'
+  applyTheme(next)
+}
+
+// 初始化主题
+const savedTheme = (localStorage.getItem('theme') || 'auto') as Theme
+applyTheme(savedTheme)
+
+// 监听系统主题变化
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if ((localStorage.getItem('theme') || 'auto') === 'auto') {
+    applyTheme('auto')
+  }
+})
+
+themeBtn.addEventListener('click', cycleTheme)
 
 loadBackground()
 loadShortcuts()
