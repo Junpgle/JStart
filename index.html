@@ -9,6 +9,7 @@
 <body>
   <div class="background" id="background"></div>
   <div class="weather" id="weather"></div>
+  <button class="user-btn" id="userBtn" title="登录">登录</button>
   <button class="theme-btn" id="themeBtn" title="切换主题">
     <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="5"></circle>
@@ -64,6 +65,21 @@
       <div class="modal-actions">
         <button id="cancelBtn">取消</button>
         <button id="saveBtn">保存</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="loginModal">
+    <div class="modal-content">
+      <h3 id="loginTitle">登录</h3>
+      <input type="text" id="loginUsername" placeholder="用户名" style="display:none">
+      <input type="email" id="loginEmail" placeholder="邮箱">
+      <input type="password" id="loginPassword" placeholder="密码">
+      <input type="text" id="loginCode" placeholder="邮箱验证码" style="display:none" maxlength="6">
+      <div id="loginError" class="login-error"></div>
+      <div class="modal-actions">
+        <button id="loginCancelBtn">取消</button>
+        <button id="loginToggleBtn">注册</button>
+        <button id="loginSubmitBtn">登录</button>
       </div>
     </div>
   </div>

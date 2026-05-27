@@ -24,9 +24,23 @@ const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLBu
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 const weatherEl = document.getElementById('weather') as HTMLDivElement
+const userBtn = document.getElementById('userBtn') as HTMLButtonElement
+const loginModal = document.getElementById('loginModal') as HTMLDivElement
+const loginTitle = document.getElementById('loginTitle') as HTMLHeadingElement
+const loginUsername = document.getElementById('loginUsername') as HTMLInputElement
+const loginEmail = document.getElementById('loginEmail') as HTMLInputElement
+const loginPassword = document.getElementById('loginPassword') as HTMLInputElement
+const loginCode = document.getElementById('loginCode') as HTMLInputElement
+const loginError = document.getElementById('loginError') as HTMLDivElement
+const loginCancelBtn = document.getElementById('loginCancelBtn') as HTMLButtonElement
+const loginToggleBtn = document.getElementById('loginToggleBtn') as HTMLButtonElement
+const loginSubmitBtn = document.getElementById('loginSubmitBtn') as HTMLButtonElement
 
+const API_BASE = 'https://api-cdt.junpgle.me'
 let currentEngine: Engine = 'bing'
 let debounceTimer: number | null = null
+let isRegisterMode = false
+let isVerifyStep = false
 
 const searchUrls: Record<Engine, string> = {
   bing: 'https://www.bing.com/search?q=',
@@ -335,6 +349,7 @@ shortcutsGrid.addEventListener('drop', (e) => {
   shortcuts.splice(dropIndex, 0, moved)
   localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
   renderShortcuts(shortcuts)
+  syncAfterChange()
   dragIndex = null
 })
 
@@ -356,6 +371,7 @@ shortcutsGrid.addEventListener('click', (e) => {
     shortcuts.splice(index, 1)
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
     renderShortcuts(shortcuts)
+    syncAfterChange()
   } else if (target.classList.contains('add-shortcut-btn')) {
     addModal.classList.add('visible')
   }
@@ -374,6 +390,7 @@ saveBtn.addEventListener('click', () => {
     shortcuts.push({ name, url, icon: name[0].toUpperCase() })
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
     renderShortcuts(shortcuts)
+    syncAfterChange()
     shortcutNameInput.value = ''
     shortcutUrlInput.value = ''
     addModal.classList.remove('visible')
@@ -444,3 +461,245 @@ async function loadWeather(): Promise<void> {
 loadWeather()
 loadBackground()
 loadShortcuts()
+
+// ==================== Auth ====================
+
+function getToken(): string | null {
+  return localStorage.getItem('jstart_token')
+}
+
+function getUser(): { id: number; username: string; email: string } | null {
+  const s = localStorage.getItem('jstart_user')
+  return s ? JSON.parse(s) : null
+}
+
+function isLoggedIn(): boolean {
+  return !!getToken()
+}
+
+function updateUserBtn(): void {
+  const user = getUser()
+  if (user) {
+    userBtn.innerHTML = `<span class="user-avatar">${user.username[0].toUpperCase()}</span><span>${user.username}</span>`
+    userBtn.title = '点击退出登录'
+  } else {
+    userBtn.textContent = '登录'
+    userBtn.title = '登录'
+  }
+}
+
+userBtn.addEventListener('click', () => {
+  if (isLoggedIn()) {
+    localStorage.removeItem('jstart_token')
+    localStorage.removeItem('jstart_user')
+    updateUserBtn()
+  } else {
+    loginModal.classList.add('visible')
+    loginError.textContent = ''
+  }
+})
+
+loginCancelBtn.addEventListener('click', () => {
+  loginModal.classList.remove('visible')
+  loginError.textContent = ''
+  isVerifyStep = false
+  loginCode.style.display = 'none'
+})
+
+loginToggleBtn.addEventListener('click', () => {
+  isRegisterMode = !isRegisterMode
+  isVerifyStep = false
+  loginTitle.textContent = isRegisterMode ? '注册' : '登录'
+  loginSubmitBtn.textContent = isRegisterMode ? '发送验证码' : '登录'
+  loginToggleBtn.textContent = isRegisterMode ? '返回登录' : '注册'
+  loginUsername.style.display = isRegisterMode ? 'block' : 'none'
+  loginPassword.style.display = 'block'
+  loginCode.style.display = 'none'
+  loginError.textContent = ''
+})
+
+loginSubmitBtn.addEventListener('click', async () => {
+  const email = loginEmail.value.trim()
+  const password = loginPassword.value
+
+  if (!email) {
+    loginError.textContent = '请填写邮箱'
+    return
+  }
+
+  loginSubmitBtn.disabled = true
+  loginSubmitBtn.textContent = '请稍候...'
+  loginError.textContent = ''
+
+  try {
+    if (isRegisterMode && !isVerifyStep) {
+      // 第一步：发送验证码
+      const username = loginUsername.value.trim()
+      if (!username) {
+        loginError.textContent = '请填写用户名'
+        loginSubmitBtn.disabled = false
+        loginSubmitBtn.textContent = '发送验证码'
+        return
+      }
+      if (!password) {
+        loginError.textContent = '请填写密码'
+        loginSubmitBtn.disabled = false
+        loginSubmitBtn.textContent = '发送验证码'
+        return
+      }
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, username })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        loginError.textContent = data.error || '注册失败'
+        loginSubmitBtn.disabled = false
+        loginSubmitBtn.textContent = '发送验证码'
+        return
+      }
+      // 进入验证码输入步骤
+      isVerifyStep = true
+      loginCode.style.display = 'block'
+      loginPassword.style.display = 'none'
+      loginUsername.style.display = 'none'
+      loginTitle.textContent = '输入验证码'
+      loginSubmitBtn.textContent = '验证并注册'
+      loginError.textContent = '验证码已发送到邮箱'
+      loginSubmitBtn.disabled = false
+      return
+    }
+
+    if (isRegisterMode && isVerifyStep) {
+      // 第二步：验证码验证
+      const code = loginCode.value.trim()
+      if (!code) {
+        loginError.textContent = '请输入验证码'
+        loginSubmitBtn.disabled = false
+        loginSubmitBtn.textContent = '验证并注册'
+        return
+      }
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        loginError.textContent = data.error || '验证失败'
+        loginSubmitBtn.disabled = false
+        loginSubmitBtn.textContent = '验证并注册'
+        return
+      }
+      // 注册成功，自动登录
+      const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: loginPassword.value })
+      })
+      const loginData = await loginRes.json()
+      if (loginRes.ok) {
+        localStorage.setItem('jstart_token', loginData.token)
+        localStorage.setItem('jstart_user', JSON.stringify(loginData.user))
+      }
+      closeLoginModal()
+      updateUserBtn()
+      await pullShortcuts()
+      return
+    }
+
+    // 登录
+    if (!password) {
+      loginError.textContent = '请填写密码'
+      loginSubmitBtn.disabled = false
+      loginSubmitBtn.textContent = '登录'
+      return
+    }
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      loginError.textContent = data.error || '登录失败'
+      loginSubmitBtn.disabled = false
+      loginSubmitBtn.textContent = '登录'
+      return
+    }
+    localStorage.setItem('jstart_token', data.token)
+    localStorage.setItem('jstart_user', JSON.stringify(data.user))
+    closeLoginModal()
+    updateUserBtn()
+    await pullShortcuts()
+  } catch {
+    loginError.textContent = '网络错误'
+  } finally {
+    loginSubmitBtn.disabled = false
+    if (!isVerifyStep) {
+      loginSubmitBtn.textContent = isRegisterMode ? '发送验证码' : '登录'
+    }
+  }
+})
+
+function closeLoginModal(): void {
+  loginModal.classList.remove('visible')
+  loginEmail.value = ''
+  loginPassword.value = ''
+  loginUsername.value = ''
+  loginCode.value = ''
+  loginError.textContent = ''
+  isVerifyStep = false
+  loginCode.style.display = 'none'
+  loginPassword.style.display = 'block'
+  loginUsername.style.display = isRegisterMode ? 'block' : 'none'
+  loginTitle.textContent = isRegisterMode ? '注册' : '登录'
+  loginSubmitBtn.textContent = isRegisterMode ? '发送验证码' : '登录'
+}
+
+// ==================== Sync ====================
+
+async function pullShortcuts(): Promise<void> {
+  if (!isLoggedIn()) return
+  try {
+    const res = await fetch(`${API_BASE}/api/jstart/shortcuts`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    if (data.shortcuts && data.shortcuts.length > 0) {
+      localStorage.setItem('shortcuts', JSON.stringify(data.shortcuts))
+      renderShortcuts(data.shortcuts)
+    } else {
+      // 云端无数据，把本地推上去
+      const local = localStorage.getItem('shortcuts')
+      if (local) await pushShortcuts(JSON.parse(local))
+    }
+  } catch {}
+}
+
+async function pushShortcuts(shortcuts: Shortcut[]): Promise<void> {
+  if (!isLoggedIn()) return
+  try {
+    await fetch(`${API_BASE}/api/jstart/shortcuts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ shortcuts })
+    })
+  } catch {}
+}
+
+function syncAfterChange(): void {
+  if (!isLoggedIn()) return
+  const saved = localStorage.getItem('shortcuts')
+  const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
+  pushShortcuts(shortcuts)
+}
+
+// 初始化
+updateUserBtn()
+if (isLoggedIn()) pullShortcuts()
