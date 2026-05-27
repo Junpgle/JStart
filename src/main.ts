@@ -497,28 +497,28 @@ async function loadWeather(): Promise<void> {
   }
 }
 
-let pomodoroStartTime = 0
-let pomodoroPlanned = 0
+let pomodoroTimestamp = 0
+let pomodoroTargetEnd = 0
 let pomodoroTodoTitle = ''
-let pomodoroTimerMode = 0 // 0=倒计时, 1=正计时
+let pomodoroMode = 0 // 0=倒计时, 1=正计时
 let pomodoroTickTimer: number | null = null
 
 function updatePomodoroDisplay(): void {
-  if (!pomodoroStartTime) return
-  const elapsed = Math.floor((Date.now() - pomodoroStartTime) / 1000)
+  if (!pomodoroTimestamp) return
+  const now = Date.now()
+  const elapsed = Math.floor((now - pomodoroTimestamp) / 1000)
   let display: number
-  if (pomodoroTimerMode === 1) {
-    // 正计时：显示已过时间
+  if (pomodoroMode === 1) {
     display = elapsed
   } else {
-    // 倒计时：显示剩余时间
-    display = Math.max(0, pomodoroPlanned - elapsed)
+    const planned = Math.floor((pomodoroTargetEnd - pomodoroTimestamp) / 1000)
+    display = Math.max(0, planned - elapsed)
   }
   const min = Math.floor(display / 60)
   const sec = display % 60
   const title = pomodoroTodoTitle ? ` · ${pomodoroTodoTitle}` : ''
-  const prefix = pomodoroTimerMode === 1 ? '🍅' : '⏱️'
-  pomodoroStatus.innerHTML = `<span class="pomodoro-dot"></span>${prefix} ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${title}`
+  const icon = pomodoroMode === 1 ? '🍅' : '⏱️'
+  pomodoroStatus.innerHTML = `<span class="pomodoro-dot"></span>${icon} ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${title}`
 }
 
 async function checkPomodoro(): Promise<void> {
@@ -532,11 +532,12 @@ async function checkPomodoro(): Promise<void> {
     })
     if (!res.ok) return
     const data = await res.json()
-    if (data.active && data.record) {
-      pomodoroStartTime = data.record.start_time
-      pomodoroPlanned = data.record.planned_duration || 1500
-      pomodoroTodoTitle = data.record.todo_title || ''
-      pomodoroTimerMode = data.timer_mode ?? 0
+    if (data.active && data.state) {
+      const s = data.state
+      pomodoroMode = s.mode ?? 0
+      pomodoroTimestamp = s.timestamp || 0
+      pomodoroTargetEnd = s.target_end_ms || 0
+      pomodoroTodoTitle = s.todo_title || s.todoTitle || ''
       pomodoroStatus.classList.add('active')
       updatePomodoroDisplay()
       if (!pomodoroTickTimer) {
@@ -545,7 +546,7 @@ async function checkPomodoro(): Promise<void> {
     } else {
       pomodoroStatus.classList.remove('active')
       if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
-      pomodoroStartTime = 0
+      pomodoroTimestamp = 0
     }
   } catch {}
 }
