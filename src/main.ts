@@ -15,7 +15,6 @@ const suggestions = document.getElementById('suggestions') as HTMLDivElement
 const searchBox = document.querySelector('.search-box') as HTMLDivElement
 const themeBtn = document.getElementById('themeBtn') as HTMLButtonElement
 const shortcutsGrid = document.getElementById('shortcutsGrid') as HTMLDivElement
-const addShortcutBtn = document.getElementById('addShortcutBtn') as HTMLButtonElement
 const addModal = document.getElementById('addModal') as HTMLDivElement
 const cancelBtn = document.getElementById('cancelBtn') as HTMLButtonElement
 const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement
@@ -268,12 +267,14 @@ function renderShortcuts(shortcuts: Shortcut[]): void {
       </a>
       <button class="shortcut-delete" data-index="${i}">×</button>
     </div>
-  `).join('')
+  `).join('') + `
+    <div class="shortcut-item">
+      <button class="add-shortcut-btn" id="addShortcutBtn">+</button>
+      <div class="shortcut-name">&nbsp;</div>
+    </div>
+  `
 }
 
-addShortcutBtn.addEventListener('click', () => {
-  addModal.classList.add('visible')
-})
 
 let dragIndex: number | null = null
 let dragStartPos = { x: 0, y: 0 }
@@ -355,6 +356,8 @@ shortcutsGrid.addEventListener('click', (e) => {
     shortcuts.splice(index, 1)
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
     renderShortcuts(shortcuts)
+  } else if (target.classList.contains('add-shortcut-btn')) {
+    addModal.classList.add('visible')
   }
 })
 
