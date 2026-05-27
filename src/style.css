@@ -261,6 +261,7 @@ body {
   gap: 16px;
   justify-content: center;
   max-width: 600px;
+  padding-bottom: 48px;
 }
 
 .shortcuts-grid {
