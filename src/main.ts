@@ -12,6 +12,7 @@ const background = document.getElementById('background') as HTMLDivElement
 const searchInput = document.getElementById('searchInput') as HTMLInputElement
 const searchBtn = document.getElementById('searchBtn') as HTMLButtonElement
 const suggestions = document.getElementById('suggestions') as HTMLDivElement
+const searchBox = document.querySelector('.search-box') as HTMLDivElement
 const shortcutsGrid = document.getElementById('shortcutsGrid') as HTMLDivElement
 const addShortcutBtn = document.getElementById('addShortcutBtn') as HTMLButtonElement
 const addModal = document.getElementById('addModal') as HTMLDivElement
@@ -76,22 +77,40 @@ function loadSuggestions(query: string): void {
     delete (window as any)[cb]
     script.remove()
     suggestions.classList.remove('visible')
+    searchBox.classList.remove('has-suggestions')
   }
 
-  // 全部用 JSONP，彻底避免编码和跨域问题
-  const urls: Record<Engine, string> = {
-    bing: `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(query)}`,
-    google: `https://suggestqueries.google.com/complete/search?client=youtube&q=${encodeURIComponent(query)}&callback=${cb}`,
-    baidu: `https://suggestion.baidu.com/su?wd=${encodeURIComponent(query)}&action=opensearch&cb=${cb}`
-  }
+  if (currentEngine === 'google') {
+    // Google 用 JSONP
+    script.src = `https://suggestqueries.google.com/complete/search?client=youtube&q=${encodeURIComponent(query)}&callback=${cb}`
+    document.body.appendChild(script)
+  } else {
+    // Bing / 百度 走代理 fetch
+    const url = currentEngine === 'bing'
+      ? `/sug/bing/osjson.aspx?query=${encodeURIComponent(query)}`
+      : `/sug/baidu/su?wd=${encodeURIComponent(query)}&action=opensearch`
 
-  script.src = urls[currentEngine]
-  document.body.appendChild(script)
+    const decoder = currentEngine === 'baidu'
+      ? (r: Response) => r.arrayBuffer().then(b => new TextDecoder('gbk').decode(b))
+      : (r: Response) => r.text()
+
+    fetch(url)
+      .then(decoder)
+      .then(text => {
+        const data = JSON.parse(text)
+        showSuggestions(data[1] || [])
+      })
+      .catch(() => {
+        suggestions.classList.remove('visible')
+        searchBox.classList.remove('has-suggestions')
+      })
+  }
 }
 
 function showSuggestions(items: string[]): void {
   if (items.length === 0) {
     suggestions.classList.remove('visible')
+    searchBox.classList.remove('has-suggestions')
     return
   }
 
@@ -99,6 +118,7 @@ function showSuggestions(items: string[]): void {
     `<div class="suggestion-item">${item}</div>`
   ).join('')
   suggestions.classList.add('visible')
+  searchBox.classList.add('has-suggestions')
 }
 
 engineBtns.forEach(btn => {
@@ -117,6 +137,7 @@ searchInput.addEventListener('blur', () => {
   setTimeout(() => {
     background.classList.remove('blur')
     suggestions.classList.remove('visible')
+    searchBox.classList.remove('has-suggestions')
   }, 200)
 })
 
