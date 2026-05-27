@@ -24,6 +24,7 @@ const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLBu
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 const weatherEl = document.getElementById('weather') as HTMLDivElement
+const pomodoroStatus = document.getElementById('pomodoroStatus') as HTMLDivElement
 const toastEl = document.getElementById('toast') as HTMLDivElement
 const userBtn = document.getElementById('userBtn') as HTMLButtonElement
 const loginModal = document.getElementById('loginModal') as HTMLDivElement
@@ -496,9 +497,64 @@ async function loadWeather(): Promise<void> {
   }
 }
 
+let pomodoroStartTime = 0
+let pomodoroPlanned = 0
+let pomodoroTodoTitle = ''
+let pomodoroTimerMode = 0 // 0=倒计时, 1=正计时
+let pomodoroTickTimer: number | null = null
+
+function updatePomodoroDisplay(): void {
+  if (!pomodoroStartTime) return
+  const elapsed = Math.floor((Date.now() - pomodoroStartTime) / 1000)
+  let display: number
+  if (pomodoroTimerMode === 1) {
+    // 正计时：显示已过时间
+    display = elapsed
+  } else {
+    // 倒计时：显示剩余时间
+    display = Math.max(0, pomodoroPlanned - elapsed)
+  }
+  const min = Math.floor(display / 60)
+  const sec = display % 60
+  const title = pomodoroTodoTitle ? ` · ${pomodoroTodoTitle}` : ''
+  const prefix = pomodoroTimerMode === 1 ? '🍅' : '⏱️'
+  pomodoroStatus.innerHTML = `<span class="pomodoro-dot"></span>${prefix} ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${title}`
+}
+
+async function checkPomodoro(): Promise<void> {
+  if (!isLoggedIn()) {
+    pomodoroStatus.classList.remove('active')
+    return
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/jstart/pomodoro-active`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    if (data.active && data.record) {
+      pomodoroStartTime = data.record.start_time
+      pomodoroPlanned = data.record.planned_duration || 1500
+      pomodoroTodoTitle = data.record.todo_title || ''
+      pomodoroTimerMode = data.timer_mode ?? 0
+      pomodoroStatus.classList.add('active')
+      updatePomodoroDisplay()
+      if (!pomodoroTickTimer) {
+        pomodoroTickTimer = window.setInterval(updatePomodoroDisplay, 1000)
+      }
+    } else {
+      pomodoroStatus.classList.remove('active')
+      if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
+      pomodoroStartTime = 0
+    }
+  } catch {}
+}
+
 loadWeather()
 loadBackground()
 loadShortcuts()
+checkPomodoro()
+setInterval(checkPomodoro, 30000)
 
 // ==================== Toast ====================
 
