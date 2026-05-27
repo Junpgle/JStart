@@ -140,9 +140,10 @@ function loadSuggestions(query: string): void {
   const cb = 'sug_' + Date.now()
   const script = document.createElement('script')
   script.id = 'sug-script'
+  const win: Record<string, unknown> = window as unknown as Record<string, unknown>
 
-  window[cb] = (data: unknown) => {
-    delete (window as any)[cb]
+  win[cb] = (data: unknown) => {
+    delete win[cb]
     script.remove()
     if (currentEngine === 'google') {
       const items = ((data as any)[1] || []).map((i: any[]) => i[0])
@@ -153,7 +154,7 @@ function loadSuggestions(query: string): void {
   }
 
   script.onerror = () => {
-    delete (window as any)[cb]
+    delete win[cb]
     script.remove()
     suggestions.classList.remove('visible')
     searchBox.classList.remove('has-suggestions')
