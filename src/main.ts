@@ -22,6 +22,8 @@ const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement
 const shortcutNameInput = document.getElementById('shortcutName') as HTMLInputElement
 const shortcutUrlInput = document.getElementById('shortcutUrl') as HTMLInputElement
 const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLButtonElement>
+const clock = document.getElementById('clock') as HTMLDivElement
+const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 
 let currentEngine: Engine = 'bing'
 let debounceTimer: number | null = null
@@ -39,7 +41,8 @@ async function loadBackground(): Promise<void> {
   // 1. 立即显示缓存壁纸
   const cached = localStorage.getItem(cacheKey)
   if (cached) {
-    const { url } = JSON.parse(cached)
+    const { url, title } = JSON.parse(cached)
+    if (title) wallpaperInfo.textContent = title
     try {
       const cache = await caches.open(cacheName)
       const response = await cache.match(url)
@@ -59,6 +62,7 @@ async function loadBackground(): Promise<void> {
     if (!data.url) return
 
     const todayUrl = data.url
+    const todayTitle = data.title || data.copyright || ''
     const cachedData = cached ? JSON.parse(cached) : null
 
     // 3. 如果今天壁纸和缓存相同，已完成
@@ -402,6 +406,14 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 })
 
 themeBtn.addEventListener('click', cycleTheme)
+
+function updateClock(): void {
+  const now = new Date()
+  clock.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+updateClock()
+setInterval(updateClock, 1000)
 
 loadBackground()
 loadShortcuts()
