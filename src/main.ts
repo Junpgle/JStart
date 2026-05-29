@@ -288,17 +288,28 @@ function getFaviconUrl(url: string): string {
     const domain = new URL(url).hostname
     const cached = faviconCache.get(domain)
     if (cached) return cached
-    const remote = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
-    // 后台获取并缓存为 blob URL
-    fetch(remote).then(r => r.blob()).then(blob => {
-      const blobUrl = URL.createObjectURL(blob)
-      faviconCache.set(domain, blobUrl)
-      // 更新已渲染的 img
-      document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
-        img.src = blobUrl
-      })
-    }).catch(() => {})
-    return remote
+    const origin = new URL(url).origin
+    // 依次尝试：网站自身 > 百度静态
+    const sources = [
+      `${origin}/favicon.ico`,
+      `https://statics.dnspod.cn/proxy_favicons/t/${domain}`,
+    ]
+    const fallbackImg = sources[0]
+    const tryFetch = (index: number) => {
+      if (index >= sources.length) return
+      fetch(sources[index]).then(r => {
+        if (!r.ok) throw new Error()
+        return r.blob()
+      }).then(blob => {
+        const blobUrl = URL.createObjectURL(blob)
+        faviconCache.set(domain, blobUrl)
+        document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
+          img.src = blobUrl
+        })
+      }).catch(() => tryFetch(index + 1))
+    }
+    tryFetch(0)
+    return fallbackImg
   } catch {
     return ''
   }
