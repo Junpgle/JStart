@@ -25,6 +25,7 @@ const engineBtns = document.querySelectorAll('.engine-btn') as NodeListOf<HTMLBu
 const clock = document.getElementById('clock') as HTMLDivElement
 const wallpaperInfo = document.getElementById('wallpaperInfo') as HTMLDivElement
 const weatherEl = document.getElementById('weather') as HTMLDivElement
+const countdownBar = document.getElementById('countdownBar') as HTMLDivElement
 const toastEl = document.getElementById('toast') as HTMLDivElement
 const userBtn = document.getElementById('userBtn') as HTMLButtonElement
 const loginModal = document.getElementById('loginModal') as HTMLDivElement
@@ -277,34 +278,67 @@ function loadShortcuts(): void {
   renderShortcuts(shortcuts)
 }
 
-const faviconCache = new Map<string, string>()
+const faviconMemCache = new Map<string, string>()
+
+async function getCachedFavicon(domain: string): Promise<string | null> {
+  try {
+    const cache = await caches.open('jstart-favicons')
+    const res = await cache.match(`https://favicon-cache/${domain}`)
+    if (res) {
+      const blob = await res.blob()
+      return URL.createObjectURL(blob)
+    }
+  } catch {}
+  return null
+}
+
+async function setCachedFavicon(domain: string, blob: Blob): Promise<void> {
+  try {
+    const cache = await caches.open('jstart-favicons')
+    await cache.put(`https://favicon-cache/${domain}`, new Response(blob))
+  } catch {}
+}
 
 function getFaviconUrl(url: string): string {
   try {
     const domain = new URL(url).hostname
-    const cached = faviconCache.get(domain)
-    if (cached) return cached
+    const memCached = faviconMemCache.get(domain)
+    if (memCached) return memCached
     const origin = new URL(url).origin
-    // 依次尝试：网站自身 > 百度静态
     const sources = [
-      `${origin}/favicon.ico`,
+      `https://favicon.im/${domain}.128`,
       `https://statics.dnspod.cn/proxy_favicons/t/${domain}`,
+      `${origin}/favicon.ico`,
     ]
-    const fallbackImg = sources[0]
-    const tryFetch = (index: number) => {
-      if (index >= sources.length) return
-      fetch(sources[index]).then(r => {
-        if (!r.ok) throw new Error()
-        return r.blob()
-      }).then(blob => {
-        const blobUrl = URL.createObjectURL(blob)
-        faviconCache.set(domain, blobUrl)
+    const fallbackImg = `https://favicon.im/${domain}.128`
+
+    // 先查 Cache API 持久缓存
+    getCachedFavicon(domain).then(blobUrl => {
+      if (blobUrl) {
+        faviconMemCache.set(domain, blobUrl)
         document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
           img.src = blobUrl
         })
-      }).catch(() => tryFetch(index + 1))
-    }
-    tryFetch(0)
+        return
+      }
+      // 缓存未命中，依次尝试下载
+      const tryFetch = (index: number) => {
+        if (index >= sources.length) return
+        fetch(sources[index]).then(r => {
+          if (!r.ok) throw new Error()
+          return r.blob()
+        }).then(blob => {
+          const blobUrl = URL.createObjectURL(blob)
+          faviconMemCache.set(domain, blobUrl)
+          setCachedFavicon(domain, blob)
+          document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
+            img.src = blobUrl
+          })
+        }).catch(() => tryFetch(index + 1))
+      }
+      tryFetch(0)
+    })
+
     return fallbackImg
   } catch {
     return ''
@@ -850,6 +884,46 @@ function syncAfterChange(): void {
   pushShortcuts(shortcuts)
 }
 
+// ==================== Countdown ====================
+
+async function loadCountdown(): Promise<void> {
+  if (!isLoggedIn()) return
+  try {
+    const user = getUser()
+    if (!user) return
+    const res = await fetch(`${API_BASE}/api/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        device_id: 'jstart-web',
+        last_sync_time: 0,
+        todos: [],
+        todo_groups: [],
+        countdowns: [],
+        pomodoro_records: [],
+        pomodoro_tags: []
+      })
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    const list: { title: string; target_time: number; is_deleted: boolean }[] = data.server_countdowns || []
+    const now = Date.now()
+    const upcoming = list
+      .filter(c => !c.is_deleted && c.target_time > now)
+      .sort((a, b) => a.target_time - b.target_time)
+    if (upcoming.length === 0) return
+    const nearest = upcoming[0]
+    const days = Math.ceil((nearest.target_time - now) / 86400000)
+    countdownBar.innerHTML = `<span class="countdown-label">${nearest.title}</span><span class="countdown-days">还有 ${days} 天</span>`
+    countdownBar.classList.add('visible')
+  } catch {}
+}
+
 // 初始化
 updateUserBtn()
 if (isLoggedIn()) pullShortcuts()
+if (isLoggedIn()) loadCountdown()
