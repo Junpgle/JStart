@@ -278,70 +278,30 @@ function loadShortcuts(): void {
   renderShortcuts(shortcuts)
 }
 
-const faviconMemCache = new Map<string, string>()
-
-async function getCachedFavicon(domain: string): Promise<string | null> {
-  try {
-    const cache = await caches.open('jstart-favicons')
-    const res = await cache.match(`https://favicon-cache/${domain}`)
-    if (res) {
-      const blob = await res.blob()
-      return URL.createObjectURL(blob)
-    }
-  } catch {}
-  return null
-}
-
-async function setCachedFavicon(domain: string, blob: Blob): Promise<void> {
-  try {
-    const cache = await caches.open('jstart-favicons')
-    await cache.put(`https://favicon-cache/${domain}`, new Response(blob))
-  } catch {}
-}
-
 function getFaviconUrl(url: string): string {
   try {
-    const domain = new URL(url).hostname
-    const memCached = faviconMemCache.get(domain)
-    if (memCached) return memCached
-    const origin = new URL(url).origin
-    const sources = [
-      `https://favicon.im/${domain}.128`,
-      `https://statics.dnspod.cn/proxy_favicons/t/${domain}`,
-      `${origin}/favicon.ico`,
-    ]
-    const fallbackImg = `https://favicon.im/${domain}.128`
-
-    // 先查 Cache API 持久缓存
-    getCachedFavicon(domain).then(blobUrl => {
-      if (blobUrl) {
-        faviconMemCache.set(domain, blobUrl)
-        document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
-          img.src = blobUrl
-        })
-        return
-      }
-      // 缓存未命中，依次尝试下载
-      const tryFetch = (index: number) => {
-        if (index >= sources.length) return
-        fetch(sources[index]).then(r => {
-          if (!r.ok) throw new Error()
-          return r.blob()
-        }).then(blob => {
-          const blobUrl = URL.createObjectURL(blob)
-          faviconMemCache.set(domain, blobUrl)
-          setCachedFavicon(domain, blob)
-          document.querySelectorAll<HTMLImageElement>(`img.favicon-${CSS.escape(domain)}`).forEach(img => {
-            img.src = blobUrl
-          })
-        }).catch(() => tryFetch(index + 1))
-      }
-      tryFetch(0)
-    })
-
-    return fallbackImg
+    const { origin } = new URL(url)
+    // 先用站点自身的 favicon（不受 CORS 限制），失败再降级到代理
+    return `${origin}/favicon.ico`
   } catch {
     return ''
+  }
+}
+
+function applyFaviconFallback(img: HTMLImageElement, domain: string): void {
+  const fallbacks = [
+    `https://favicon.im/${domain}.128`,
+    `https://statics.dnspod.cn/proxy_favicons/t/${domain}`,
+  ]
+  let i = 0
+  img.onerror = () => {
+    if (i < fallbacks.length) {
+      img.onerror = null
+      img.src = fallbacks[i++]
+    } else {
+      img.onerror = null
+      img.style.display = 'none'
+    }
   }
 }
 
@@ -366,6 +326,11 @@ function renderShortcuts(shortcuts: Shortcut[]): void {
       <div class="shortcut-name">&nbsp;</div>
     </div>
   `
+  // 绑定 onerror 降级
+  shortcutsGrid.querySelectorAll<HTMLImageElement>('img[class^="favicon-"]').forEach(img => {
+    const domain = img.className.replace('favicon-', '')
+    applyFaviconFallback(img, domain)
+  })
 }
 
 
@@ -918,8 +883,35 @@ async function loadCountdown(): Promise<void> {
     if (upcoming.length === 0) return
     const nearest = upcoming[0]
     const days = Math.ceil((nearest.target_time - now) / 86400000)
-    countdownBar.innerHTML = `<span class="countdown-label">${nearest.title}</span><span class="countdown-days">还有 ${days} 天</span>`
+    const targetDate = new Date(nearest.target_time)
+    const dateStr = `${targetDate.getFullYear()}/${String(targetDate.getMonth() + 1).padStart(2, '0')}/${String(targetDate.getDate()).padStart(2, '0')}`
+    const content = countdownBar.querySelector('.island-content') as HTMLDivElement
+    content.innerHTML = `
+      <span class="countdown-label">${nearest.title}</span>
+      <span class="countdown-days">还有 ${days} 天</span>
+    `
+    // 展开时显示的详情
+    const detail = document.createElement('div')
+    detail.className = 'countdown-detail'
+    detail.innerHTML = `
+      <div class="detail-row"><span>目标日期</span><span class="detail-value">${dateStr}</span></div>
+      <div class="detail-row"><span>剩余天数</span><span class="detail-value">${days} 天</span></div>
+      ${upcoming.length > 1 ? `<div class="detail-row"><span>更多倒计时</span><span class="detail-value">${upcoming.length - 1} 个</span></div>` : ''}
+    `
+    countdownBar.appendChild(detail)
     countdownBar.classList.add('visible')
+
+    // 点击展开/收起
+    countdownBar.addEventListener('click', () => {
+      countdownBar.classList.toggle('expanded')
+    })
+
+    // 点击外部收起
+    document.addEventListener('click', (e) => {
+      if (!countdownBar.contains(e.target as Node)) {
+        countdownBar.classList.remove('expanded')
+      }
+    })
   } catch {}
 }
 
