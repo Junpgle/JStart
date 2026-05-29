@@ -9,6 +9,7 @@ interface Shortcut {
 type Engine = 'bing' | 'google' | 'baidu'
 
 const background = document.getElementById('background') as HTMLDivElement
+const backgroundOverlay = document.getElementById('backgroundOverlay') as HTMLDivElement
 const searchInput = document.getElementById('searchInput') as HTMLInputElement
 const searchBtn = document.getElementById('searchBtn') as HTMLButtonElement
 const suggestions = document.getElementById('suggestions') as HTMLDivElement
@@ -49,34 +50,44 @@ const searchUrls: Record<Engine, string> = {
   baidu: 'https://www.baidu.com/s?wd='
 }
 
+function crossfade(src: string, callback?: () => void) {
+  const img = new Image()
+  img.onload = () => {
+    backgroundOverlay.style.backgroundImage = `url(${src})`
+    backgroundOverlay.style.opacity = '1'
+    const onEnd = () => {
+      background.style.backgroundImage = `url(${src})`
+      backgroundOverlay.style.opacity = '0'
+      backgroundOverlay.removeEventListener('transitionend', onEnd)
+      callback?.()
+    }
+    backgroundOverlay.addEventListener('transitionend', onEnd)
+  }
+  img.src = src
+}
+
 async function loadBackground(): Promise<void> {
   const cacheKey = 'wallpaper-cache'
   const imgDataKey = 'wallpaper-img-data'
 
-  // 1. 立即显示缓存壁纸
+  // 1. 立即显示缓存壁纸（首屏直接设置，无需动画）
   const cached = localStorage.getItem(cacheKey)
   let cacheAvailable = false
   if (cached) {
     const { url, title } = JSON.parse(cached)
     if (title) wallpaperInfo.textContent = title
-    // 优先从 Cache API 读取
     try {
       const cache = await caches.open('jstart-wallpaper')
       const response = await cache.match(url)
       if (response) {
         const blob = await response.blob()
         background.style.backgroundImage = `url(${URL.createObjectURL(blob)})`
-        background.classList.add('loaded')
         cacheAvailable = true
       }
     } catch {}
-    // Cache API 失败，从 localStorage 读 base64
     if (!cacheAvailable) {
       const imgData = localStorage.getItem(imgDataKey)
-      if (imgData) {
-        background.style.backgroundImage = `url(${imgData})`
-        background.classList.add('loaded')
-      }
+      if (imgData) background.style.backgroundImage = `url(${imgData})`
     }
   }
 
@@ -93,33 +104,19 @@ async function loadBackground(): Promise<void> {
     // 3. 如果今天壁纸和缓存相同，已完成
     if (cachedData && cachedData.url === todayUrl) return
 
-    // 4. 下载新壁纸并淡入
-    const applyImage = (src: string) => {
-      const img = new Image()
-      img.onload = () => {
-        background.style.backgroundImage = `url(${src})`
-        if (!background.classList.contains('loaded')) {
-          background.classList.add('loaded')
-        }
-      }
-      img.src = src
-    }
-
     const imgRes = await fetch(todayUrl)
     const blob = await imgRes.blob()
     const blobUrl = URL.createObjectURL(blob)
 
-    // 5. 缓存到 Cache API
+    // 4. 缓存到 Cache API
     try {
       const cache = await caches.open('jstart-wallpaper')
       await cache.put(todayUrl, new Response(blob))
-      // 清理旧缓存
       const keys = await cache.keys()
       for (const req of keys) {
         if (req.url !== todayUrl) await cache.delete(req)
       }
     } catch {
-      // Cache API 不可用，存 base64 到 localStorage
       const reader = new FileReader()
       reader.onload = () => {
         try { localStorage.setItem(imgDataKey, reader.result as string) } catch {}
@@ -127,17 +124,14 @@ async function loadBackground(): Promise<void> {
       reader.readAsDataURL(blob)
     }
 
-    // 6. 淡入新壁纸
-    applyImage(blobUrl)
+    // 5. 交叉淡入新壁纸
+    crossfade(blobUrl)
 
-    // 7. 更新缓存元数据
+    // 6. 更新缓存元数据
     wallpaperInfo.textContent = todayTitle
     localStorage.setItem(cacheKey, JSON.stringify({ url: todayUrl, title: todayTitle }))
   } catch {
-    if (!background.classList.contains('loaded')) {
-      background.style.backgroundColor = '#1a1a2e'
-      background.classList.add('loaded')
-    }
+    // 网络失败，保持渐变兜底背景
   }
 }
 
@@ -230,11 +224,13 @@ engineBtns.forEach(btn => {
 
 searchInput.addEventListener('focus', () => {
   background.classList.add('blur')
+  backgroundOverlay.classList.add('blur')
 })
 
 searchInput.addEventListener('blur', () => {
   setTimeout(() => {
     background.classList.remove('blur')
+    backgroundOverlay.classList.remove('blur')
     suggestions.classList.remove('visible')
     searchBox.classList.remove('has-suggestions')
   }, 200)
