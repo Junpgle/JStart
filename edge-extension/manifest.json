@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "JStart New Tab",
+  "version": "1.0.0",
+  "description": "Replace new tab page with JStart",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "icons": {
+    "16": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  }
+}

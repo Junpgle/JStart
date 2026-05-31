@@ -47,8 +47,12 @@ body {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   background-size: cover;
   background-position: center;
-  transition: filter 0.3s ease;
+  transition: filter 0.3s ease, opacity 0.8s ease;
   z-index: -2;
+  opacity: 0;
+}
+
+.background.loaded {
   opacity: 1;
 }
 
