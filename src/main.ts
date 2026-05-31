@@ -481,6 +481,7 @@ let pomodoroTargetEnd = 0
 let pomodoroMode = 0 // 0=倒计时, 1=正计时
 let pomodoroTodoTitle = ''
 let pomodoroTickTimer: number | null = null
+let pomodoroActive = false
 
 function updateClock(): void {
   if (pomodoroTimestamp) return
@@ -544,15 +545,41 @@ function updatePomodoroDisplay(): void {
       </defs>
     </svg>
   </span>`
-  clock.innerHTML = `${badge}<span class="pomodoro-time">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
-  clock.className = 'clock pomodoro'
+  const newContent = `${badge}<span class="pomodoro-time">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
+  
+  if (!pomodoroActive) {
+    const oldContent = clock.innerHTML
+    clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new">${newContent}</div>`
+    clock.className = 'clock switching'
+    clock.addEventListener('animationend', () => {
+      clock.innerHTML = newContent
+      clock.className = 'clock pomodoro'
+    }, { once: true })
+    pomodoroActive = true
+  } else {
+    const pomodoroTimeEl = clock.querySelector('.pomodoro-time')
+    if (pomodoroTimeEl) {
+      pomodoroTimeEl.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    }
+  }
 }
 
 function stopPomodoroDisplay(): void {
-  clock.classList.remove('pomodoro')
+  if (pomodoroActive) {
+    const oldContent = clock.innerHTML
+    const now = new Date()
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new">${timeStr}</div>`
+    clock.className = 'clock switching'
+    clock.addEventListener('animationend', () => {
+      clock.innerHTML = timeStr
+      clock.className = 'clock'
+    }, { once: true })
+    pomodoroActive = false
+  }
   if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
   pomodoroTimestamp = 0
-  updateClock()
+  setTimeout(() => updateClock(), 800)
 }
 
 async function checkPomodoro(): Promise<void> {
