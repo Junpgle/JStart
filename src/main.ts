@@ -92,6 +92,9 @@ async function loadBackground(): Promise<void> {
     }
   }
 
+  // 壁纸加载完成后淡入显示
+  background.classList.add('loaded')
+
   // 2. 获取今天的壁纸元数据
   try {
     const res = await fetch('https://bing.biturl.top/?resolution=UHD&format=json&index=0&mkt=zh-CN')
