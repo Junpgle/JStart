@@ -944,6 +944,13 @@ function applyCountdownData(data: any): void {
     <span class="countdown-label">${nearest.title}</span>
     <span class="countdown-days">还有 ${days} 天</span>
   `
+
+  // 优化：在 append 之前清除已有详情，防止重复累加
+  const existingDetail = countdownBar.querySelector('.countdown-detail')
+  if (existingDetail) {
+    existingDetail.remove()
+  }
+
   // 展开时显示的详情
   const detail = document.createElement('div')
   detail.className = 'countdown-detail'
@@ -954,21 +961,21 @@ function applyCountdownData(data: any): void {
   `
   countdownBar.appendChild(detail)
   countdownBar.classList.add('visible')
-
-  // 点击展开/收起
-  countdownBar.addEventListener('click', () => {
-    countdownBar.classList.toggle('expanded')
-  })
-
-  // 点击外部收起
-  document.addEventListener('click', (e) => {
-    if (!countdownBar.contains(e.target as Node)) {
-      countdownBar.classList.remove('expanded')
-    }
-  })
 }
 
 // 初始化
 updateUserBtn()
 if (isLoggedIn()) pullShortcuts()
 if (isLoggedIn()) loadCountdown()
+
+// 点击展开/收起
+countdownBar.addEventListener('click', () => {
+  countdownBar.classList.toggle('expanded')
+})
+
+// 点击外部收起
+document.addEventListener('click', (e) => {
+  if (!countdownBar.contains(e.target as Node)) {
+    countdownBar.classList.remove('expanded')
+  }
+})
