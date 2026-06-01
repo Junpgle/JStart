@@ -487,6 +487,7 @@ function updateClock(): void {
   if (pomodoroTimestamp) return
   const now = new Date()
   clock.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  clock.className = 'clock'
 }
 
 updateClock()
@@ -527,34 +528,16 @@ function updatePomodoroDisplay(): void {
   const min = Math.floor(display / 60)
   const sec = display % 60
   const title = pomodoroTodoTitle ? `<div class="clock-sub">${pomodoroTodoTitle}</div>` : ''
-  const badge = `<span class="pomodoro-badge">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 21C16.9706 21 21 17.4183 21 13C21 8.58172 16.9706 5 12 5C7.02944 5 3 8.58172 3 13C3 17.4183 7.02944 21 12 21Z" fill="url(#tomatoGrad)"/>
-      <path d="M7.5 10C6.5 11 6 12.5 6 13.5C6 14 6.2 14.2 6.5 14C7 13.5 8 11.5 8 10.5C8 10.1 7.8 9.7 7.5 10Z" fill="white" fill-opacity="0.5"/>
-      <path d="M12 5V2.5C12 2.22386 12.2239 2 12.5 2C12.7761 2 13 2.22386 13 2.5V5H12Z" fill="#2ECC71"/>
-      <path d="M12 5.5C10 4.5 7.5 4.5 6.5 5C8 6 10.5 6 12 5.5Z" fill="#27AE60"/>
-      <path d="M12 5.5C14 4.5 16.5 4.5 17.5 5C16 6 13.5 6 12 5.5Z" fill="#27AE60"/>
-      <path d="M12 5.5C12 3.5 11 1.5 9.5 1C10.5 2.5 11.5 4 12 5.5Z" fill="#219A52"/>
-      <path d="M12 5.5C12 3.5 13 1.5 14.5 1C13.5 2.5 12.5 4 12 5.5Z" fill="#219A52"/>
-      <defs>
-        <radialGradient id="tomatoGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(10 10) rotate(45) scale(12 12)">
-          <stop offset="0%" stop-color="#FF6B6B"/>
-          <stop offset="60%" stop-color="#FF4757"/>
-          <stop offset="100%" stop-color="#D63031"/>
-        </radialGradient>
-      </defs>
-    </svg>
-  </span>`
-  const newContent = `${badge}<span class="pomodoro-time">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
+  const newContent = `<span class="pomodoro-badge"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21C16.9706 21 21 17.4183 21 13C21 8.58172 16.9706 5 12 5C7.02944 5 3 8.58172 3 13C3 17.4183 7.02944 21 12 21Z" fill="url(#tomatoGrad)"/><path d="M7.5 10C6.5 11 6 12.5 6 13.5C6 14 6.2 14.2 6.5 14C7 13.5 8 11.5 8 10.5C8 10.1 7.8 9.7 7.5 10Z" fill="white" fill-opacity="0.5"/><path d="M12 5V2.5C12 2.22386 12.2239 2 12.5 2C12.7761 2 13 2.22386 13 2.5V5H12Z" fill="#2ECC71"/><path d="M12 5.5C10 4.5 7.5 4.5 6.5 5C8 6 10.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C14 4.5 16.5 4.5 17.5 5C16 6 13.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C12 3.5 11 1.5 9.5 1C10.5 2.5 11.5 4 12 5.5Z" fill="#219A52"/><path d="M12 5.5C12 3.5 13 1.5 14.5 1C13.5 2.5 12.5 4 12 5.5Z" fill="#219A52"/><defs><radialGradient id="tomatoGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(10 10) rotate(45) scale(12 12)"><stop offset="0%" stop-color="#FF6B6B"/><stop offset="60%" stop-color="#FF4757"/><stop offset="100%" stop-color="#D63031"/></radialGradient></defs></svg></span><span class="pomodoro-time">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
   
   if (!pomodoroActive) {
     const oldContent = clock.innerHTML
     clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new">${newContent}</div>`
     clock.className = 'clock switching'
-    clock.addEventListener('animationend', () => {
+    setTimeout(() => {
       clock.innerHTML = newContent
       clock.className = 'clock pomodoro'
-    }, { once: true })
+    }, 800)
     pomodoroActive = true
   } else {
     const pomodoroTimeEl = clock.querySelector('.pomodoro-time')
@@ -569,12 +552,12 @@ function stopPomodoroDisplay(): void {
     const oldContent = clock.innerHTML
     const now = new Date()
     const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-    clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new">${timeStr}</div>`
+    clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new-time">${timeStr}</div>`
     clock.className = 'clock switching'
-    clock.addEventListener('animationend', () => {
+    setTimeout(() => {
       clock.innerHTML = timeStr
       clock.className = 'clock'
-    }, { once: true })
+    }, 800)
     pomodoroActive = false
   }
   if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
@@ -587,26 +570,46 @@ async function checkPomodoro(): Promise<void> {
     stopPomodoroDisplay()
     return
   }
+  
+  // 检查缓存（2分钟有效期）
+  const cacheKey = 'pomodoro-cache'
+  const cached = localStorage.getItem(cacheKey)
+  if (cached) {
+    const { data, timestamp } = JSON.parse(cached)
+    if (Date.now() - timestamp < 2 * 60 * 1000) {
+      applyPomodoroData(data)
+      return
+    }
+  }
+  
   try {
     const res = await fetch(`${API_BASE}/api/jstart/pomodoro-active`, {
       headers: { 'Authorization': `Bearer ${getToken()}` }
     })
     if (!res.ok) return
     const data = await res.json()
-    if (data.active && data.state) {
-      const s = data.state
-      pomodoroMode = s.mode ?? 0
-      pomodoroTimestamp = s.timestamp || 0
-      pomodoroTargetEnd = s.target_end_ms || 0
-      pomodoroTodoTitle = s.todo_title || s.todoTitle || ''
-      updatePomodoroDisplay()
-      if (!pomodoroTickTimer) {
-        pomodoroTickTimer = window.setInterval(updatePomodoroDisplay, 1000)
-      }
-    } else {
-      stopPomodoroDisplay()
-    }
+    
+    // 缓存数据
+    localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }))
+    
+    applyPomodoroData(data)
   } catch {}
+}
+
+function applyPomodoroData(data: any): void {
+  if (data.active && data.state) {
+    const s = data.state
+    pomodoroMode = s.mode ?? 0
+    pomodoroTimestamp = s.timestamp || 0
+    pomodoroTargetEnd = s.target_end_ms || 0
+    pomodoroTodoTitle = s.todo_title || s.todoTitle || ''
+    updatePomodoroDisplay()
+    if (!pomodoroTickTimer) {
+      pomodoroTickTimer = window.setInterval(updatePomodoroDisplay, 1000)
+    }
+  } else {
+    stopPomodoroDisplay()
+  }
 }
 
 loadWeather()
@@ -883,6 +886,18 @@ function syncAfterChange(): void {
 
 async function loadCountdown(): Promise<void> {
   if (!isLoggedIn()) return
+  
+  // 检查缓存（1天有效期）
+  const cacheKey = 'countdown-cache'
+  const cached = localStorage.getItem(cacheKey)
+  if (cached) {
+    const { data, timestamp } = JSON.parse(cached)
+    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+      applyCountdownData(data)
+      return
+    }
+  }
+  
   try {
     const user = getUser()
     if (!user) return
@@ -905,44 +920,52 @@ async function loadCountdown(): Promise<void> {
     })
     if (!res.ok) return
     const data = await res.json()
-    const list: { title: string; target_time: number; is_deleted: boolean }[] = data.server_countdowns || []
-    const now = Date.now()
-    const upcoming = list
-      .filter(c => !c.is_deleted && c.target_time > now)
-      .sort((a, b) => a.target_time - b.target_time)
-    if (upcoming.length === 0) return
-    const nearest = upcoming[0]
-    const days = Math.ceil((nearest.target_time - now) / 86400000)
-    const targetDate = new Date(nearest.target_time)
-    const dateStr = `${targetDate.getFullYear()}/${String(targetDate.getMonth() + 1).padStart(2, '0')}/${String(targetDate.getDate()).padStart(2, '0')}`
-    const content = countdownBar.querySelector('.island-content') as HTMLDivElement
-    content.innerHTML = `
-      <span class="countdown-label">${nearest.title}</span>
-      <span class="countdown-days">还有 ${days} 天</span>
-    `
-    // 展开时显示的详情
-    const detail = document.createElement('div')
-    detail.className = 'countdown-detail'
-    detail.innerHTML = `
-      <div class="detail-row"><span>目标日期</span><span class="detail-value">${dateStr}</span></div>
-      <div class="detail-row"><span>剩余天数</span><span class="detail-value">${days} 天</span></div>
-      ${upcoming.length > 1 ? `<div class="detail-row"><span>更多倒计时</span><span class="detail-value">${upcoming.length - 1} 个</span></div>` : ''}
-    `
-    countdownBar.appendChild(detail)
-    countdownBar.classList.add('visible')
-
-    // 点击展开/收起
-    countdownBar.addEventListener('click', () => {
-      countdownBar.classList.toggle('expanded')
-    })
-
-    // 点击外部收起
-    document.addEventListener('click', (e) => {
-      if (!countdownBar.contains(e.target as Node)) {
-        countdownBar.classList.remove('expanded')
-      }
-    })
+    
+    // 缓存数据
+    localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }))
+    
+    applyCountdownData(data)
   } catch {}
+}
+
+function applyCountdownData(data: any): void {
+  const list: { title: string; target_time: number; is_deleted: boolean }[] = data.server_countdowns || []
+  const now = Date.now()
+  const upcoming = list
+    .filter(c => !c.is_deleted && c.target_time > now)
+    .sort((a, b) => a.target_time - b.target_time)
+  if (upcoming.length === 0) return
+  const nearest = upcoming[0]
+  const days = Math.ceil((nearest.target_time - now) / 86400000)
+  const targetDate = new Date(nearest.target_time)
+  const dateStr = `${targetDate.getFullYear()}/${String(targetDate.getMonth() + 1).padStart(2, '0')}/${String(targetDate.getDate()).padStart(2, '0')}`
+  const content = countdownBar.querySelector('.island-content') as HTMLDivElement
+  content.innerHTML = `
+    <span class="countdown-label">${nearest.title}</span>
+    <span class="countdown-days">还有 ${days} 天</span>
+  `
+  // 展开时显示的详情
+  const detail = document.createElement('div')
+  detail.className = 'countdown-detail'
+  detail.innerHTML = `
+    <div class="detail-row"><span>目标日期</span><span class="detail-value">${dateStr}</span></div>
+    <div class="detail-row"><span>剩余天数</span><span class="detail-value">${days} 天</span></div>
+    ${upcoming.length > 1 ? `<div class="detail-row"><span>更多倒计时</span><span class="detail-value">${upcoming.length - 1} 个</span></div>` : ''}
+  `
+  countdownBar.appendChild(detail)
+  countdownBar.classList.add('visible')
+
+  // 点击展开/收起
+  countdownBar.addEventListener('click', () => {
+    countdownBar.classList.toggle('expanded')
+  })
+
+  // 点击外部收起
+  document.addEventListener('click', (e) => {
+    if (!countdownBar.contains(e.target as Node)) {
+      countdownBar.classList.remove('expanded')
+    }
+  })
 }
 
 // 初始化

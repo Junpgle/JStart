@@ -263,6 +263,27 @@ body {
   user-select: none;
   position: relative;
   padding: 10px 20px;
+  overflow: hidden;
+}
+
+.clock.pomodoro {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: visible;
+}
+
+.clock.pomodoro .pomodoro-time {
+  display: block;
+  text-align: center;
+}
+
+.clock.pomodoro .clock-sub {
+  display: block;
+  text-align: center;
 }
 
 .clock.switching {
@@ -285,18 +306,69 @@ body {
   left: 20px;
   right: 20px;
   bottom: 10px;
+  display: inline-block;
+  opacity: 0;
+  clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
+}
+
+.pomodoro-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 71, 87, 0.15);
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.25);
+  transition: all 0.3s ease;
+  animation: pomodoro-pulse 2s infinite ease-in-out;
+}
+
+.clock-new .pomodoro-time {
+  display: block;
+  text-align: center;
+}
+
+.clock-new .clock-sub {
+  display: block;
+  text-align: center;
+}
+
+.clock-new-time {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
-  overflow: visible;
 }
 
-.clock-new .pomodoro-badge {
-  position: absolute;
-  top: -10px;
-  left: -24px;
+.clock.switching .clock-old {
+  animation: fade-out-left 0.8s ease-in-out forwards;
+}
+
+.clock.switching .clock-new,
+.clock.switching .clock-new-time {
+  animation: reveal-right 0.8s ease-in-out forwards;
+}
+
+.clock-new .pomodoro-time {
+  display: block;
+  text-align: center;
+}
+
+.clock-new .clock-sub {
+  display: block;
+  text-align: center;
 }
 
 .clock.switching .clock-old {
@@ -340,16 +412,6 @@ body {
 @keyframes sweep-light {
   0% { clip-path: polygon(0 0, 3% 0, 3% 100%, 0 100%); }
   100% { clip-path: polygon(97% 0, 100% 0, 100% 100%, 97% 100%); }
-}
-
-.clock.pomodoro {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 32px;
-  overflow: visible;
 }
 
 .clock::after {
@@ -686,17 +748,6 @@ body {
   margin-bottom: 4px;
 }
 
-.clock.pomodoro {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 32px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
 .clock::after {
   content: '';
   position: absolute;
@@ -761,24 +812,6 @@ body {
   letter-spacing: 2px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-}
-
-.pomodoro-badge {
-  position: absolute;
-  top: -10px;
-  left: -24px;
-  width: 32px;
-  height: 32px;
-  background: rgba(255, 71, 87, 0.15);
-  border: 1px solid rgba(255, 71, 87, 0.3);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.25);
-  transition: all 0.3s ease;
-  animation: pomodoro-pulse 2s infinite ease-in-out;
 }
 
 .pomodoro-badge:hover {
