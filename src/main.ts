@@ -283,9 +283,8 @@ function loadShortcuts(): void {
 
 function getFaviconUrl(url: string): string {
   try {
-    const { origin } = new URL(url)
-    // 先用站点自身的 favicon（不受 CORS 限制），失败再降级到代理
-    return `${origin}/favicon.ico`
+    const { hostname } = new URL(url)
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`
   } catch {
     return ''
   }
