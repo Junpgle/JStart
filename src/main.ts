@@ -481,11 +481,18 @@ let pomodoroMode = 0 // 0=倒计时, 1=正计时
 let pomodoroTodoTitle = ''
 let pomodoroTickTimer: number | null = null
 let pomodoroActive = false
+let pomodoroIsPaused = false // 🚀 新增：暂停状态
+let pomodoroPausedAtMs = 0   // 🚀 新增：暂停时间点
 
 function updateClock(): void {
   if (pomodoroTimestamp) return
   const now = new Date()
-  clock.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  clock.textContent = now.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
   clock.className = 'clock'
 }
 
@@ -516,7 +523,15 @@ async function loadWeather(): Promise<void> {
 function updatePomodoroDisplay(): void {
   if (!pomodoroTimestamp) return
   const now = Date.now()
-  const elapsed = Math.floor((now - pomodoroTimestamp) / 1000)
+
+  // 🚀 暂停状态下显示暂停时的时间，不继续计时
+  let elapsed: number
+  if (pomodoroIsPaused && pomodoroPausedAtMs > 0) {
+    elapsed = Math.floor((pomodoroPausedAtMs - pomodoroTimestamp) / 1000)
+  } else {
+    elapsed = Math.floor((now - pomodoroTimestamp) / 1000)
+  }
+
   let display: number
   if (pomodoroMode === 1) {
     display = elapsed
@@ -527,21 +542,31 @@ function updatePomodoroDisplay(): void {
   const min = Math.floor(display / 60)
   const sec = display % 60
   const title = pomodoroTodoTitle ? `<div class="clock-sub">${pomodoroTodoTitle}</div>` : ''
-  const newContent = `<span class="pomodoro-badge"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21C16.9706 21 21 17.4183 21 13C21 8.58172 16.9706 5 12 5C7.02944 5 3 8.58172 3 13C3 17.4183 7.02944 21 12 21Z" fill="url(#tomatoGrad)"/><path d="M7.5 10C6.5 11 6 12.5 6 13.5C6 14 6.2 14.2 6.5 14C7 13.5 8 11.5 8 10.5C8 10.1 7.8 9.7 7.5 10Z" fill="white" fill-opacity="0.5"/><path d="M12 5V2.5C12 2.22386 12.2239 2 12.5 2C12.7761 2 13 2.22386 13 2.5V5H12Z" fill="#2ECC71"/><path d="M12 5.5C10 4.5 7.5 4.5 6.5 5C8 6 10.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C14 4.5 16.5 4.5 17.5 5C16 6 13.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C12 3.5 11 1.5 9.5 1C10.5 2.5 11.5 4 12 5.5Z" fill="#219A52"/><path d="M12 5.5C12 3.5 13 1.5 14.5 1C13.5 2.5 12.5 4 12 5.5Z" fill="#219A52"/><defs><radialGradient id="tomatoGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(10 10) rotate(45) scale(12 12)"><stop offset="0%" stop-color="#FF6B6B"/><stop offset="60%" stop-color="#FF4757"/><stop offset="100%" stop-color="#D63031"/></radialGradient></defs></svg></span><span class="pomodoro-time">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
-  
+
+  // 🚀 暂停状态下显示不同的样式和文字
+  const pauseIcon = pomodoroIsPaused ? '<span class="pomodoro-pause-icon">⏸</span>' : ''
+  const pauseClass = pomodoroIsPaused ? ' paused' : ''
+  const newContent = `<span class="pomodoro-badge${pauseClass}"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21C16.9706 21 21 17.4183 21 13C21 8.58172 16.9706 5 12 5C7.02944 5 3 8.58172 3 13C3 17.4183 7.02944 21 12 21Z" fill="url(#tomatoGrad)"/><path d="M7.5 10C6.5 11 6 12.5 6 13.5C6 14 6.2 14.2 6.5 14C7 13.5 8 11.5 8 10.5C8 10.1 7.8 9.7 7.5 10Z" fill="white" fill-opacity="0.5"/><path d="M12 5V2.5C12 2.22386 12.2239 2 12.5 2C12.7761 2 13 2.22386 13 2.5V5H12Z" fill="#2ECC71"/><path d="M12 5.5C10 4.5 7.5 4.5 6.5 5C8 6 10.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C14 4.5 16.5 4.5 17.5 5C16 6 13.5 6 12 5.5Z" fill="#27AE60"/><path d="M12 5.5C12 3.5 11 1.5 9.5 1C10.5 2.5 11.5 4 12 5.5Z" fill="#219A52"/><path d="M12 5.5C12 3.5 13 1.5 14.5 1C13.5 2.5 12.5 4 12 5.5Z" fill="#219A52"/><defs><radialGradient id="tomatoGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(10 10) rotate(45) scale(12 12)"><stop offset="0%" stop-color="${pomodoroIsPaused ? '#F59E0B' : '#FF6B6B'}"/><stop offset="60%" stop-color="${pomodoroIsPaused ? '#D97706' : '#FF4757'}"/><stop offset="100%" stop-color="${pomodoroIsPaused ? '#B45309' : '#D63031'}"/></radialGradient></defs></svg></span>${pauseIcon}<span class="pomodoro-time${pauseClass}">${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}</span>${title}`
+
   if (!pomodoroActive) {
     const oldContent = clock.innerHTML
     clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new">${newContent}</div>`
     clock.className = 'clock switching'
     setTimeout(() => {
       clock.innerHTML = newContent
-      clock.className = 'clock pomodoro'
+      clock.className = `clock pomodoro${pomodoroIsPaused ? ' paused' : ''}`
     }, 800)
     pomodoroActive = true
   } else {
     const pomodoroTimeEl = clock.querySelector('.pomodoro-time')
     if (pomodoroTimeEl) {
       pomodoroTimeEl.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    }
+    // 更新暂停状态样式
+    clock.className = `clock pomodoro${pomodoroIsPaused ? ' paused' : ''}`
+    const badge = clock.querySelector('.pomodoro-badge')
+    if (badge) {
+      badge.className = `pomodoro-badge${pomodoroIsPaused ? ' paused' : ''}`
     }
   }
 }
@@ -550,7 +575,12 @@ function stopPomodoroDisplay(): void {
   if (pomodoroActive) {
     const oldContent = clock.innerHTML
     const now = new Date()
-    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    const timeStr = now.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
     clock.innerHTML = `<div class="clock-old">${oldContent}</div><div class="clock-new-time">${timeStr}</div>`
     clock.className = 'clock switching'
     setTimeout(() => {
@@ -559,8 +589,14 @@ function stopPomodoroDisplay(): void {
     }, 800)
     pomodoroActive = false
   }
-  if (pomodoroTickTimer) { clearInterval(pomodoroTickTimer); pomodoroTickTimer = null }
+  if (pomodoroTickTimer) {
+    clearInterval(pomodoroTickTimer);
+    pomodoroTickTimer = null
+  }
   pomodoroTimestamp = 0
+  // 🚀 重置暂停状态
+  pomodoroIsPaused = false
+  pomodoroPausedAtMs = 0
   setTimeout(() => updateClock(), 800)
 }
 
@@ -569,30 +605,31 @@ async function checkPomodoro(): Promise<void> {
     stopPomodoroDisplay()
     return
   }
-  
+
   // 检查缓存（2分钟有效期）
   const cacheKey = 'pomodoro-cache'
   const cached = localStorage.getItem(cacheKey)
   if (cached) {
-    const { data, timestamp } = JSON.parse(cached)
+    const {data, timestamp} = JSON.parse(cached)
     if (Date.now() - timestamp < 2 * 60 * 1000) {
       applyPomodoroData(data)
       return
     }
   }
-  
+
   try {
     const res = await fetch(`${API_BASE}/api/jstart/pomodoro-active`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
+      headers: {'Authorization': `Bearer ${getToken()}`}
     })
     if (!res.ok) return
     const data = await res.json()
-    
+
     // 缓存数据
-    localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }))
-    
+    localStorage.setItem(cacheKey, JSON.stringify({data, timestamp: Date.now()}))
+
     applyPomodoroData(data)
-  } catch {}
+  } catch {
+  }
 }
 
 function applyPomodoroData(data: any): void {
@@ -602,6 +639,9 @@ function applyPomodoroData(data: any): void {
     pomodoroTimestamp = s.timestamp || 0
     pomodoroTargetEnd = s.target_end_ms || 0
     pomodoroTodoTitle = s.todo_title || s.todoTitle || ''
+    // 🚀 新增：读取暂停状态
+    pomodoroIsPaused = s.isPaused === true
+    pomodoroPausedAtMs = s.pausedAtMs || 0
     updatePomodoroDisplay()
     if (!pomodoroTickTimer) {
       pomodoroTickTimer = window.setInterval(updatePomodoroDisplay, 1000)
