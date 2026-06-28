@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/vite.svg">
   <link rel="apple-touch-icon" href="/vite.svg">
   <title>JStart</title>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
 </head>
 <body>
   <div class="background" id="background"></div>
@@ -17,6 +18,20 @@
     <div class="island-content"></div>
   </div>
   <button class="user-btn" id="userBtn" title="登录">登录</button>
+  <div class="user-menu" id="userMenu">
+    <div class="user-menu-item" id="refreshIconsBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+      <span>刷新图标</span>
+    </div>
+    <div class="user-menu-item" id="logoutBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+      </svg>
+      <span>退出登录</span>
+    </div>
+  </div>
   <button class="theme-btn" id="themeBtn" title="切换主题">
     <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="5"></circle>
@@ -85,6 +100,7 @@
       <input type="email" id="loginEmail" placeholder="邮箱" autocomplete="email">
       <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
       <input type="text" id="loginCode" placeholder="邮箱验证码" style="display:none" maxlength="6">
+      <div id="turnstileContainer" class="turnstile-container"></div>
       <div id="loginError" class="login-error"></div>
       <div class="modal-actions">
         <button id="loginCancelBtn">取消</button>

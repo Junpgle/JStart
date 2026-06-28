@@ -28,6 +28,9 @@ const weatherEl = document.getElementById('weather') as HTMLDivElement
 const countdownBar = document.getElementById('countdownBar') as HTMLDivElement
 const toastEl = document.getElementById('toast') as HTMLDivElement
 const userBtn = document.getElementById('userBtn') as HTMLButtonElement
+const userMenu = document.getElementById('userMenu') as HTMLDivElement
+const refreshIconsBtn = document.getElementById('refreshIconsBtn') as HTMLDivElement
+const logoutBtn = document.getElementById('logoutBtn') as HTMLDivElement
 const loginModal = document.getElementById('loginModal') as HTMLDivElement
 const loginTitle = document.getElementById('loginTitle') as HTMLHeadingElement
 const loginUsername = document.getElementById('loginUsername') as HTMLInputElement
@@ -38,12 +41,95 @@ const loginError = document.getElementById('loginError') as HTMLDivElement
 const loginCancelBtn = document.getElementById('loginCancelBtn') as HTMLButtonElement
 const loginToggleBtn = document.getElementById('loginToggleBtn') as HTMLButtonElement
 const loginSubmitBtn = document.getElementById('loginSubmitBtn') as HTMLButtonElement
+const turnstileContainer = document.getElementById('turnstileContainer') as HTMLDivElement
 
 const API_BASE = 'https://api-cdt.junpgle.me'
 let currentEngine: Engine = 'bing'
 let debounceTimer: number | null = null
 let isRegisterMode = false
 let isVerifyStep = false
+
+// Turnstile相关
+const TURNSTILE_SITE_KEY = '0x4AAAAAADkYYUiQdEWVhVYh'
+let turnstileToken: string | null = null
+let turnstileWidgetId: string | null = null
+
+function initTurnstile(): void {
+  if (!window.turnstile || !turnstileContainer) return
+  destroyTurnstile()
+  turnstileWidgetId = window.turnstile.render(turnstileContainer, {
+    sitekey: TURNSTILE_SITE_KEY,
+    action: isRegisterMode ? 'register' : 'login',
+    callback: (token: string) => {
+      turnstileToken = token
+    },
+    'expired-callback': () => {
+      turnstileToken = null
+    },
+    'error-callback': () => {
+      turnstileToken = null
+    }
+  })
+}
+
+function destroyTurnstile(): void {
+  if (window.turnstile && turnstileWidgetId) {
+    window.turnstile.remove(turnstileWidgetId)
+    turnstileWidgetId = null
+  }
+  turnstileToken = null
+}
+
+function resetTurnstile(): void {
+  if (window.turnstile && turnstileWidgetId) {
+    window.turnstile.reset(turnstileWidgetId)
+  }
+  turnstileToken = null
+}
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, config: Record<string, unknown>) => string
+      remove: (widgetId: string) => void
+      reset: (widgetId: string) => void
+    }
+  }
+}
+
+// Favicon缓存相关
+const FAVICON_CACHE_PREFIX = 'favicon-cache-'
+
+function getFaviconFromCache(domain: string): string | null {
+  return localStorage.getItem(FAVICON_CACHE_PREFIX + domain)
+}
+
+function setFaviconToCache(domain: string, dataUrl: string): void {
+  try {
+    localStorage.setItem(FAVICON_CACHE_PREFIX + domain, dataUrl)
+  } catch {
+    // localStorage满了，清除旧缓存
+    clearOldFaviconCache()
+    try {
+      localStorage.setItem(FAVICON_CACHE_PREFIX + domain, dataUrl)
+    } catch {}
+  }
+}
+
+function clearOldFaviconCache(): void {
+  const keys = Object.keys(localStorage)
+  const faviconKeys = keys.filter(k => k.startsWith(FAVICON_CACHE_PREFIX))
+  // 保留最近的一半
+  const toRemove = faviconKeys.slice(0, Math.floor(faviconKeys.length / 2))
+  toRemove.forEach(k => localStorage.removeItem(k))
+}
+
+function clearAllFaviconCache(): void {
+  const keys = Object.keys(localStorage)
+  keys.filter(k => k.startsWith(FAVICON_CACHE_PREFIX)).forEach(k => localStorage.removeItem(k))
+}
+
+
 
 const searchUrls: Record<Engine, string> = {
   bing: 'https://www.bing.com/search?q=',
@@ -267,7 +353,7 @@ suggestions.addEventListener('click', (e) => {
   }
 })
 
-function loadShortcuts(): void {
+async function loadShortcuts(): Promise<void> {
   const saved = localStorage.getItem('shortcuts')
   const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : [
     { name: 'GitHub', url: 'https://github.com', icon: 'G' },
@@ -278,7 +364,7 @@ function loadShortcuts(): void {
   if (!saved) {
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
   }
-  renderShortcuts(shortcuts)
+  await renderShortcuts(shortcuts)
 }
 
 function getFaviconUrl(url: string): string {
@@ -311,26 +397,51 @@ function getDomain(url: string): string {
   try { return new URL(url).hostname } catch { return '' }
 }
 
-function renderShortcuts(shortcuts: Shortcut[]): void {
-  shortcutsGrid.innerHTML = shortcuts.map((s, i) => `
+async function renderShortcuts(shortcuts: Shortcut[]): Promise<void> {
+  const shortcutsHtml = await Promise.all(shortcuts.map(async (s, i) => {
+    const domain = getDomain(s.url)
+    let iconSrc = getFaviconFromCache(domain)
+    if (!iconSrc) {
+      iconSrc = getFaviconUrl(s.url)
+    }
+    return `
     <div class="shortcut-item" data-index="${i}" draggable="true">
       <a href="${s.url}" class="shortcut-link" target="_blank">
         <div class="shortcut-icon">
-          <img src="${getFaviconUrl(s.url)}" class="favicon-${getDomain(s.url)}" alt="${s.name}" loading="lazy">
+          <img src="${iconSrc}" class="favicon-${domain}" alt="${s.name}" loading="lazy" data-domain="${domain}">
         </div>
         <div class="shortcut-name">${s.name}</div>
       </a>
       <button class="shortcut-delete" data-index="${i}">×</button>
     </div>
-  `).join('') + `
+  `
+  }))
+  shortcutsGrid.innerHTML = shortcutsHtml.join('') + `
     <div class="shortcut-item">
       <button class="add-shortcut-btn" id="addShortcutBtn">+</button>
       <div class="shortcut-name">&nbsp;</div>
     </div>
   `
-  // 绑定 onerror 降级
-  shortcutsGrid.querySelectorAll<HTMLImageElement>('img[class^="favicon-"]').forEach(img => {
-    const domain = img.className.replace('favicon-', '')
+  // 绑定 onerror 降级并缓存
+  shortcutsGrid.querySelectorAll<HTMLImageElement>('img[data-domain]').forEach(img => {
+    const domain = img.dataset.domain || ''
+    const cached = getFaviconFromCache(domain)
+    if (!cached) {
+      // 没有缓存，加载成功后缓存
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth || 64
+        canvas.height = img.naturalHeight || 64
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(img, 0, 0)
+          try {
+            const dataUrl = canvas.toDataURL('image/png')
+            setFaviconToCache(domain, dataUrl)
+          } catch {}
+        }
+      }
+    }
     applyFaviconFallback(img, domain)
   })
 }
@@ -383,7 +494,7 @@ shortcutsGrid.addEventListener('dragleave', (e) => {
   if (item) item.classList.remove('drag-over')
 })
 
-shortcutsGrid.addEventListener('drop', (e) => {
+shortcutsGrid.addEventListener('drop', async (e) => {
   e.preventDefault()
   const item = (e.target as HTMLElement).closest('.shortcut-item') as HTMLElement | null
   if (!item || dragIndex === null) return
@@ -394,7 +505,7 @@ shortcutsGrid.addEventListener('drop', (e) => {
   const [moved] = shortcuts.splice(dragIndex, 1)
   shortcuts.splice(dropIndex, 0, moved)
   localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
-  renderShortcuts(shortcuts)
+  await renderShortcuts(shortcuts)
   syncAfterChange()
   dragIndex = null
 })
@@ -406,7 +517,7 @@ shortcutsGrid.addEventListener('dragend', () => {
   })
 })
 
-shortcutsGrid.addEventListener('click', (e) => {
+shortcutsGrid.addEventListener('click', async (e) => {
   const target = e.target as HTMLElement
   if (target.classList.contains('shortcut-delete')) {
     e.preventDefault()
@@ -416,7 +527,7 @@ shortcutsGrid.addEventListener('click', (e) => {
     const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
     shortcuts.splice(index, 1)
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
-    renderShortcuts(shortcuts)
+    await renderShortcuts(shortcuts)
     syncAfterChange()
   } else if (target.classList.contains('add-shortcut-btn')) {
     addModal.classList.add('visible')
@@ -427,7 +538,7 @@ cancelBtn.addEventListener('click', () => {
   addModal.classList.remove('visible')
 })
 
-saveBtn.addEventListener('click', () => {
+saveBtn.addEventListener('click', async () => {
   const name = shortcutNameInput.value.trim()
   const url = shortcutUrlInput.value.trim()
   if (name && url) {
@@ -435,7 +546,7 @@ saveBtn.addEventListener('click', () => {
     const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
     shortcuts.push({ name, url, icon: name[0].toUpperCase() })
     localStorage.setItem('shortcuts', JSON.stringify(shortcuts))
-    renderShortcuts(shortcuts)
+    await renderShortcuts(shortcuts)
     syncAfterChange()
     shortcutNameInput.value = ''
     shortcutUrlInput.value = ''
@@ -689,22 +800,53 @@ function updateUserBtn(): void {
   const user = getUser()
   if (user) {
     userBtn.innerHTML = `<span class="user-avatar">${user.username[0].toUpperCase()}</span><span>${user.username}</span>`
-    userBtn.title = '点击退出登录'
+    userBtn.title = '账号管理'
   } else {
     userBtn.textContent = '登录'
     userBtn.title = '登录'
   }
 }
 
-userBtn.addEventListener('click', () => {
+function toggleUserMenu(): void {
   if (isLoggedIn()) {
-    localStorage.removeItem('jstart_token')
-    localStorage.removeItem('jstart_user')
-    updateUserBtn()
-    showToast('已退出登录')
+    userMenu.classList.toggle('visible')
   } else {
     loginModal.classList.add('visible')
     loginError.textContent = ''
+    initTurnstile()
+  }
+}
+
+function closeUserMenu(): void {
+  userMenu.classList.remove('visible')
+}
+
+userBtn.addEventListener('click', (e) => {
+  e.stopPropagation()
+  toggleUserMenu()
+})
+
+refreshIconsBtn.addEventListener('click', async () => {
+  closeUserMenu()
+  clearAllFaviconCache()
+  showToast('图标缓存已清除，正在刷新...')
+  const saved = localStorage.getItem('shortcuts')
+  const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
+  await renderShortcuts(shortcuts)
+  showToast('图标刷新完成')
+})
+
+logoutBtn.addEventListener('click', () => {
+  closeUserMenu()
+  localStorage.removeItem('jstart_token')
+  localStorage.removeItem('jstart_user')
+  updateUserBtn()
+  showToast('已退出登录')
+})
+
+document.addEventListener('click', (e) => {
+  if (!userMenu.contains(e.target as Node) && !userBtn.contains(e.target as Node)) {
+    closeUserMenu()
   }
 })
 
@@ -713,6 +855,7 @@ loginCancelBtn.addEventListener('click', () => {
   loginError.textContent = ''
   isVerifyStep = false
   loginCode.style.display = 'none'
+  destroyTurnstile()
 })
 
 loginToggleBtn.addEventListener('click', () => {
@@ -725,6 +868,7 @@ loginToggleBtn.addEventListener('click', () => {
   loginPassword.style.display = 'block'
   loginCode.style.display = 'none'
   loginError.textContent = ''
+  resetTurnstile()
 })
 
 loginSubmitBtn.addEventListener('click', async () => {
@@ -733,6 +877,12 @@ loginSubmitBtn.addEventListener('click', async () => {
 
   if (!email) {
     loginError.textContent = '请填写邮箱'
+    return
+  }
+
+  // 检查人机验证（验证码步骤不需要）
+  if (!isVerifyStep && !turnstileToken) {
+    loginError.textContent = '请先完成人机验证'
     return
   }
 
@@ -759,13 +909,14 @@ loginSubmitBtn.addEventListener('click', async () => {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, username })
+        body: JSON.stringify({ email, password, username, turnstile_token: turnstileToken })
       })
       const data = await res.json()
       if (!res.ok) {
         loginError.textContent = data.error || '注册失败'
         loginSubmitBtn.disabled = false
         loginSubmitBtn.textContent = '发送验证码'
+        resetTurnstile()
         return
       }
       // 进入验证码输入步骤
@@ -777,6 +928,7 @@ loginSubmitBtn.addEventListener('click', async () => {
       loginSubmitBtn.textContent = '验证并注册'
       loginError.textContent = '验证码已发送到邮箱'
       loginSubmitBtn.disabled = false
+      destroyTurnstile()
       return
     }
 
@@ -805,7 +957,7 @@ loginSubmitBtn.addEventListener('click', async () => {
       const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: loginPassword.value })
+        body: JSON.stringify({ email, password: loginPassword.value, turnstile_token: turnstileToken })
       })
       const loginData = await loginRes.json()
       if (loginRes.ok) {
@@ -829,13 +981,14 @@ loginSubmitBtn.addEventListener('click', async () => {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, turnstile_token: turnstileToken })
     })
     const data = await res.json()
     if (!res.ok) {
       loginError.textContent = data.error || '登录失败'
       loginSubmitBtn.disabled = false
       loginSubmitBtn.textContent = '登录'
+      resetTurnstile()
       return
     }
     localStorage.setItem('jstart_token', data.token)
@@ -846,6 +999,7 @@ loginSubmitBtn.addEventListener('click', async () => {
     await pullShortcuts()
   } catch {
     loginError.textContent = '网络错误'
+    resetTurnstile()
   } finally {
     loginSubmitBtn.disabled = false
     if (!isVerifyStep) {
@@ -867,6 +1021,7 @@ function closeLoginModal(): void {
   loginUsername.style.display = isRegisterMode ? 'block' : 'none'
   loginTitle.textContent = isRegisterMode ? '注册' : '登录'
   loginSubmitBtn.textContent = isRegisterMode ? '发送验证码' : '登录'
+  destroyTurnstile()
 }
 
 // ==================== Sync ====================
@@ -881,7 +1036,7 @@ async function pullShortcuts(): Promise<void> {
     const data = await res.json()
     if (data.shortcuts && data.shortcuts.length > 0) {
       localStorage.setItem('shortcuts', JSON.stringify(data.shortcuts))
-      renderShortcuts(data.shortcuts)
+      await renderShortcuts(data.shortcuts)
       showToast('同步成功')
     } else {
       // 云端无数据，把本地推上去
