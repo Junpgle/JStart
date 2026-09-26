@@ -97,39 +97,31 @@ declare global {
   }
 }
 
-// Favicon缓存相关
+// Favicon 缓存：跨域图片无法可靠地通过 canvas 转成 Data URL。
+// Cache API 保存图片响应，Service Worker 在离线时返回同一份缓存。
 const FAVICON_CACHE_PREFIX = 'favicon-cache-'
+const FAVICON_CACHE_NAME = 'jstart-favicons'
 
 function getFaviconFromCache(domain: string): string | null {
   return localStorage.getItem(FAVICON_CACHE_PREFIX + domain)
 }
 
-function setFaviconToCache(domain: string, dataUrl: string): void {
+async function cacheLoadedFavicon(domain: string, src: string): Promise<boolean> {
+  if (!domain || !src.startsWith('https://')) return false
   try {
-    localStorage.setItem(FAVICON_CACHE_PREFIX + domain, dataUrl)
+    const cache = await caches.open(FAVICON_CACHE_NAME)
+    // 首次打开时页面可能还未受 Service Worker 控制，需要主动保存已加载的图片。
+    if (!navigator.serviceWorker?.controller || !(await cache.match(src))) {
+      const response = await fetch(src, { mode: 'no-cors', cache: 'force-cache' })
+      if (!response.ok && response.type !== 'opaque') return false
+      await cache.put(src, response)
+    }
+    localStorage.setItem(FAVICON_CACHE_PREFIX + domain, src)
+    return true
   } catch {
-    // localStorage满了，清除旧缓存
-    clearOldFaviconCache()
-    try {
-      localStorage.setItem(FAVICON_CACHE_PREFIX + domain, dataUrl)
-    } catch {}
+    return false
   }
 }
-
-function clearOldFaviconCache(): void {
-  const keys = Object.keys(localStorage)
-  const faviconKeys = keys.filter(k => k.startsWith(FAVICON_CACHE_PREFIX))
-  // 保留最近的一半
-  const toRemove = faviconKeys.slice(0, Math.floor(faviconKeys.length / 2))
-  toRemove.forEach(k => localStorage.removeItem(k))
-}
-
-function clearAllFaviconCache(): void {
-  const keys = Object.keys(localStorage)
-  keys.filter(k => k.startsWith(FAVICON_CACHE_PREFIX)).forEach(k => localStorage.removeItem(k))
-}
-
-
 
 const searchUrls: Record<Engine, string> = {
   bing: 'https://www.bing.com/search?q=',
@@ -376,21 +368,13 @@ function getFaviconUrl(url: string): string {
   }
 }
 
-function applyFaviconFallback(img: HTMLImageElement, domain: string): void {
-  const fallbacks = [
+function getFaviconSources(url: string, domain: string): string[] {
+  if (!domain) return []
+  return [
+    getFaviconUrl(url),
     `https://favicon.im/${domain}.128`,
     `https://statics.dnspod.cn/proxy_favicons/t/${domain}`,
   ]
-  let i = 0
-  img.onerror = () => {
-    if (i < fallbacks.length) {
-      img.onerror = null
-      img.src = fallbacks[i++]
-    } else {
-      img.onerror = null
-      img.style.display = 'none'
-    }
-  }
 }
 
 function getDomain(url: string): string {
@@ -398,52 +382,90 @@ function getDomain(url: string): string {
 }
 
 async function renderShortcuts(shortcuts: Shortcut[]): Promise<void> {
-  const shortcutsHtml = await Promise.all(shortcuts.map(async (s, i) => {
+  const shortcutsHtml = shortcuts.map((s, i) => {
     const domain = getDomain(s.url)
-    let iconSrc = getFaviconFromCache(domain)
-    if (!iconSrc) {
-      iconSrc = getFaviconUrl(s.url)
-    }
     return `
     <div class="shortcut-item" data-index="${i}" draggable="true">
       <a href="${s.url}" class="shortcut-link" target="_blank">
         <div class="shortcut-icon">
-          <img src="${iconSrc}" class="favicon-${domain}" alt="${s.name}" loading="lazy" data-domain="${domain}">
+          <img alt="${s.name}" loading="lazy" data-domain="${domain}">
+          <span class="shortcut-icon-letter" hidden></span>
         </div>
         <div class="shortcut-name">${s.name}</div>
       </a>
       <button class="shortcut-delete" data-index="${i}">×</button>
     </div>
   `
-  }))
+  })
   shortcutsGrid.innerHTML = shortcutsHtml.join('') + `
     <div class="shortcut-item">
       <button class="add-shortcut-btn" id="addShortcutBtn">+</button>
       <div class="shortcut-name">&nbsp;</div>
     </div>
   `
-  // 绑定 onerror 降级并缓存
-  shortcutsGrid.querySelectorAll<HTMLImageElement>('img[data-domain]').forEach(img => {
+  // 先绑定事件再设置 src，缓存图标也能正确触发加载和失败处理。
+  shortcutsGrid.querySelectorAll<HTMLImageElement>('img[data-domain]').forEach((img, index) => {
+    const shortcut = shortcuts[index]
     const domain = img.dataset.domain || ''
-    const cached = getFaviconFromCache(domain)
-    if (!cached) {
-      // 没有缓存，加载成功后缓存
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.naturalWidth || 64
-        canvas.height = img.naturalHeight || 64
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          ctx.drawImage(img, 0, 0)
-          try {
-            const dataUrl = canvas.toDataURL('image/png')
-            setFaviconToCache(domain, dataUrl)
-          } catch {}
-        }
+    const letter = img.nextElementSibling as HTMLSpanElement
+    letter.textContent = shortcut.icon || shortcut.name[0] || ''
+    const sources = [getFaviconFromCache(domain), ...getFaviconSources(shortcut.url, domain)]
+      .filter((src): src is string => !!src)
+      .filter((src, i, all) => all.indexOf(src) === i)
+    let sourceIndex = 0
+    img.onload = () => {
+      void cacheLoadedFavicon(domain, img.currentSrc || img.src)
+    }
+    img.onerror = () => {
+      sourceIndex++
+      if (sourceIndex < sources.length) {
+        img.src = sources[sourceIndex]
+      } else {
+        img.hidden = true
+        letter.hidden = false
       }
     }
-    applyFaviconFallback(img, domain)
+    if (sources.length > 0) img.src = sources[0]
+    else {
+      img.hidden = true
+      letter.hidden = false
+    }
   })
+}
+
+function probeFavicon(src: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const probe = new Image()
+    const finish = (loaded: boolean) => {
+      clearTimeout(timeout)
+      probe.onload = null
+      probe.onerror = null
+      resolve(loaded)
+    }
+    const timeout = window.setTimeout(() => finish(false), 8000)
+    probe.onload = () => finish(true)
+    probe.onerror = () => finish(false)
+    probe.src = src
+  })
+}
+
+async function refreshFavicon(img: HTMLImageElement, shortcut: Shortcut): Promise<boolean> {
+  const domain = getDomain(shortcut.url)
+  for (const src of getFaviconSources(shortcut.url, domain)) {
+    const refreshUrl = new URL(src)
+    refreshUrl.searchParams.set('jstart_refresh', String(Date.now()))
+    const refreshedSrc = refreshUrl.toString()
+    if (!await probeFavicon(refreshedSrc)) continue
+    if (!await cacheLoadedFavicon(domain, refreshedSrc)) continue
+    if (img.isConnected) {
+      img.hidden = false
+      const letter = img.nextElementSibling as HTMLSpanElement
+      letter.hidden = true
+      img.src = refreshedSrc
+    }
+    return true
+  }
+  return false
 }
 
 
@@ -826,14 +848,23 @@ userBtn.addEventListener('click', (e) => {
   toggleUserMenu()
 })
 
+let iconsRefreshing = false
 refreshIconsBtn.addEventListener('click', async () => {
+  if (iconsRefreshing) return
+  iconsRefreshing = true
   closeUserMenu()
-  clearAllFaviconCache()
-  showToast('图标缓存已清除，正在刷新...')
+  showToast('正在刷新图标...')
   const saved = localStorage.getItem('shortcuts')
   const shortcuts: Shortcut[] = saved ? JSON.parse(saved) : []
-  await renderShortcuts(shortcuts)
-  showToast('图标刷新完成')
+  const images = shortcutsGrid.querySelectorAll<HTMLImageElement>('img[data-domain]')
+  try {
+    const results = await Promise.all(shortcuts.map((shortcut, index) =>
+      images[index] ? refreshFavicon(images[index], shortcut) : Promise.resolve(false)
+    ))
+    showToast(results.some(Boolean) ? '图标刷新完成' : '刷新失败，已保留缓存图标', results.some(Boolean) ? 'success' : 'error')
+  } finally {
+    iconsRefreshing = false
+  }
 })
 
 logoutBtn.addEventListener('click', () => {

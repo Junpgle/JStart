@@ -25,6 +25,18 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         runtimeCaching: [
           {
+            urlPattern: /^https:\/\/(?:www\.google\.com\/s2\/favicons|favicon\.im\/|statics\.dnspod\.cn\/proxy_favicons\/t\/)/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'jstart-favicons',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: {
+                maxEntries: 64,
+                purgeOnQuotaError: true
+              }
+            }
+          },
+          {
             urlPattern: /^https:\/\/bing\.biturl\.top\/.*/i,
             handler: 'NetworkFirst',
             options: {
